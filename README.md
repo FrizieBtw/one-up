@@ -20,7 +20,7 @@ npm run dev
 - Web : http://localhost:3000
 - Serveur de jeu (Colyseus) : http://localhost:2567 (`/health` pour vérifier)
 
-Sans configuration, la plateforme tourne en mode invité : pseudo, création de salon, jointure par code, chat, réglages.
+Sans configuration, la plateforme tourne en mode invité : pseudo, cartouches 3D, création de salon, jointure par code, chat, réglages.
 
 ## Comptes (Supabase)
 
@@ -41,6 +41,7 @@ puis passer `enabled = true` dans les sections `[auth.external.google]` et `[aut
 | --- | --- |
 | `npm run dev` | Serveur de jeu et web en parallèle |
 | `npm test` | Tests Vitest (unitaires et intégration du serveur de jeu) |
+| `npm run test:e2e` | Parcours Playwright (avant la première fois : `npx playwright install chromium`) |
 | `npm run typecheck` | Vérification TypeScript de tous les paquets |
 | `npm run build` | Build de production du web |
 | `npm run db:start` / `npm run db:reset` | Supabase local / réapplication des migrations |

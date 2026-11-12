@@ -172,7 +172,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     if (current?.connected) return;
     for (const [sessionId, player] of this.state.players) {
       if (!player.connected) continue;
-      const changed = this.state.hostSessionId !== "" && this.state.hostSessionId !== sessionId;
+      const previous = this.state.hostSessionId;
+      const changed = Boolean(previous) && previous !== sessionId; // pas d'annonce pour le premier hôte
       this.state.hostSessionId = sessionId;
       void this.syncMetadata();
       if (changed) this.announce("notice", { type: "hostChanged", name: player.name });

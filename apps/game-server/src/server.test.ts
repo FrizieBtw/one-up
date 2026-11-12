@@ -107,6 +107,7 @@ describe("lobby room", () => {
     expect(JSON.parse(state.settings).laps).toBe(7);
     expect(state.capacity).toBe(4);
     expect(state.players[bob.room.sessionId]!.ready).toBe(true);
+    expect(alice.notices).toEqual(bob.notices); // aucune annonce d'hôte à la création
     expect(bob.notices).toEqual([
       { type: "settingChanged", key: "laps" },
       { type: "capacityChanged", capacity: 4 },

@@ -31,7 +31,7 @@ docs/
 ```
 
 Paquets prévus, créés quand leur phase commence (pas de coquilles vides) :
-`packages/avatar` (phase 3), `packages/cartridge` (phase 2), `packages/games/{blackjack,kart,party}` (phases 4, 8, 9),
+`packages/avatar` (phase 3), `packages/games/{blackjack,kart,party}` (phases 4, 8, 9),
 `packages/game-core` (phase 4, récompenses et cycle de partie), `assets/` (phase 2).
 
 Écarts assumés par rapport au cahier des charges :
@@ -41,6 +41,18 @@ Paquets prévus, créés quand leur phase commence (pas de coquilles vides) :
 | `database/migrations` | `supabase/migrations` | emplacement imposé par la CLI Supabase |
 | `packages/ui` | `apps/web/src/components/ui.tsx` | un seul consommateur ; à extraire si un second apparaît |
 | pnpm | npm workspaces | pnpm est cassé sur la machine de développement |
+| `packages/cartridge` | `apps/web/src/cartridge` | un seul consommateur |
+| Motion, Drei | non installés | rien ne les utilise encore ; transitions DOM en CSS |
+
+## Navigation et scène 3D
+
+États (`apps/web/src/lib/nav.ts`) : `home` → `cartridge` (dos visible, panneau `menu`, `search`, `code` ou `create`) → `lobby` (avec `settingsOpen`).
+Les routes `/` et `/lobby/[code]` rendent la même coquille ; l'URL suit l'état via `history.pushState` et `popstate`.
+La transition vers le lobby ne démarre qu'après une connexion réussie au salon : pas d'animation sur un refus du serveur.
+
+Un seul canvas plein écran, non interactif, contient toutes les cartouches. Chacune s'aligne à chaque image sur une ancre DOM
+(cellule de grille, centre de l'écran, coin supérieur droit) : le DOM garde la mise en page, le clavier et le défilement.
+Le dos de cartouche est un panneau DOM (`role="dialog"`) calé sur la plaque claire du modèle 3D.
 
 ## Authentification
 
@@ -136,4 +148,5 @@ Tables à venir, chacune dans la migration de sa phase :
 
 - `npm test` : unitaires (`packages/shared`) et intégration du serveur (`apps/game-server/src/server.test.ts`, vrais clients Colyseus contre un vrai serveur).
 - Manuel : `npm run dev`, deux navigateurs distincts, créer un salon, rejoindre par code, vérifier chat, « prêt », réglages, rechargement de page.
-- Tests de parcours Playwright : à ajouter en phase 2.
+- `npm run test:e2e` : parcours Playwright multi-joueurs (`tests/e2e/lobby.spec.ts`). Lance les serveurs ou réutilise ceux de `npm run dev`.
+  Première fois : `npx playwright install chromium`. Captures dans `test-results/`.

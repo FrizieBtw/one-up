@@ -50,3 +50,24 @@ h3 {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Apparition du panneau au dos de la cartouche, une fois le retournement engagé. */
+@keyframes back-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+.back-panel-in {
+  animation: back-panel-in 0.25s ease-out 0.3s backwards;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+.rise-in {
+  animation: rise-in 0.4s ease-out backwards;
+}
