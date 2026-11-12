@@ -14,6 +14,8 @@ let current: { code: string; room: Promise<Room> } | null = null;
 const tokenKey = (code: string) => `stepup-reconnect-${code}`;
 
 function track(room: Room): Room {
+  // Aide au débogage et aux tests de parcours ; absente du build de production.
+  if (process.env.NODE_ENV !== "production") (window as unknown as { __lobbyRoom?: Room }).__lobbyRoom = room;
   const save = () => sessionStorage.setItem(tokenKey(room.roomId), room.reconnectionToken);
   save();
   room.onReconnect(save);

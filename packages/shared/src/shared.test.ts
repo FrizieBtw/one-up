@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   GAMES,
+  LOBBY_RADIUS,
+  clampDirection,
+  filterChat,
+  stepLobbyPosition,
   clientMessages,
   defaultSettings,
   generateRoomCode,
@@ -63,5 +67,29 @@ describe("validation schemas", () => {
     expect(clientMessages.chat.safeParse({ text: "   " }).success).toBe(false);
     expect(clientMessages.chat.safeParse({ text: "x".repeat(201) }).success).toBe(false);
     expect(clientMessages.chat.safeParse({ text: " salut " }).data).toEqual({ text: "salut" });
+  });
+});
+
+describe("lobby movement", () => {
+  it("normalizes directions and rejects non-finite input", () => {
+    expect(clampDirection(0.3, -0.4)).toEqual({ x: 0.3, z: -0.4 });
+    const big = clampDirection(30, 40);
+    expect(Math.hypot(big.x, big.z)).toBeCloseTo(1);
+    expect(clampDirection(Number.NaN, 1)).toEqual({ x: 0, z: 0 });
+    expect(clampDirection(Infinity, 0)).toEqual({ x: 0, z: 0 });
+  });
+  it("keeps positions inside the room", () => {
+    const position = { x: 0, z: 0 };
+    for (let i = 0; i < 200; i++) stepLobbyPosition(position, { x: 1, z: 0 }, 0.05);
+    expect(position.x).toBeCloseTo(LOBBY_RADIUS);
+  });
+});
+
+describe("chat filter", () => {
+  it("masks banned words regardless of case and accents, leaves the rest", () => {
+    expect(filterChat("Enculé !")).toBe("****** !");
+    expect(filterChat("FUCK this")).toBe("**** this");
+    expect(filterChat("bonjour à tous")).toBe("bonjour à tous");
+    expect(filterChat("un pdf")).toBe("un pdf"); // pas de faux positif sur une sous-chaîne
   });
 });

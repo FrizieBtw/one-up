@@ -1,6 +1,6 @@
 import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { LOBBY_ROOM_NAME, normalizeRoomCode, type LobbySnapshot, type PublicRoomInfo } from "@stepup/shared";
+import { LOBBY_RADIUS, LOBBY_ROOM_NAME, LOBBY_SPAWN_RADIUS, LOBBY_SPEED, normalizeRoomCode, type LobbySnapshot, type PublicRoomInfo } from "@stepup/shared";
 import { server } from "./app";
 import { issueGuestToken, verifyGuestToken, verifyToken } from "./auth";
 import { createRateLimiter } from "./rateLimit";
@@ -158,6 +158,105 @@ describe("lobby room", () => {
     expect(Object.keys(state.players).length).toBe(2);
     expect(state.hostSessionId).toBe(alice.room.sessionId);
     await back.leave();
+    await bob.room.leave();
+  });
+
+  it("simulates movement on the server: speed cap, room bounds, no client positions", async () => {
+    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    await settle();
+    const me = () => alice.snapshot().players[alice.room.sessionId]!;
+    const start = me();
+    expect(Math.hypot(start.x, start.z)).toBeCloseTo(LOBBY_SPAWN_RADIUS, 1);
+
+    // Direction démesurée : normalisée, donc au plus LOBBY_SPEED unités par seconde.
+    alice.room.send("move", { x: 1000, z: 0 });
+    await new Promise((r) => setTimeout(r, 500));
+    const moved = me();
+    expect(moved.dx).toBeCloseTo(1);
+    const travelled = moved.x - start.x;
+    expect(travelled).toBeGreaterThan(0.8);
+    expect(travelled).toBeLessThan(LOBBY_SPEED * 0.75);
+
+    // Reste dans la salle, puis s'arrête.
+    await new Promise((r) => setTimeout(r, 2500));
+    expect(Math.hypot(me().x, me().z)).toBeLessThanOrEqual(LOBBY_RADIUS + 0.01);
+    alice.room.send("move", { x: 0, z: 0 });
+    await settle();
+    const stopped = me();
+    await settle();
+    expect(me().x).toBe(stopped.x);
+    await alice.room.leave();
+  });
+
+  it("broadcasts valid emotes, filters chat, and runs proposals through votes and host decision", async () => {
+    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const bob = await joinByCode("Bob", alice.room.roomId);
+    const emotes: any[] = [];
+    alice.room.onMessage("emote", (m: any) => emotes.push(m));
+    await settle();
+
+    bob.room.send("emote", { id: "dance" });
+    bob.room.send("chat", { text: "quelle Merde ce jeu" });
+    await settle();
+    expect(emotes).toEqual([{ sessionId: bob.room.sessionId, id: "dance" }]);
+    expect(alice.chats.at(-1).text).toBe("quelle ***** ce jeu");
+
+    // Un message hors schéma trahit un client non conforme : il est déconnecté.
+    const mallory = await joinByCode("Mallory", alice.room.roomId);
+    mallory.room.reconnection.enabled = false;
+    const kicked = new Promise((resolve) => mallory.room.onLeave(resolve));
+    mallory.room.send("emote", { id: "hack" });
+    await kicked;
+    expect(emotes.length).toBe(1);
+
+    // Bob propose : invalide refusée, valide créée, seconde bloquée par l'anti-spam.
+    bob.room.send("propose", { key: "laps", value: 99 });
+    bob.room.send("propose", { key: "laps", value: 9 });
+    bob.room.send("propose", { key: "bots", value: 2 });
+    await settle();
+    expect(bob.errors.map((e) => e.code)).toEqual(["INVALID", "RATE_LIMITED"]);
+    let proposals = Object.values(alice.snapshot().proposals);
+    expect(proposals).toMatchObject([{ authorName: "Bob", key: "laps", value: "9", votesFor: 0, votesAgainst: 0 }]);
+    const id = proposals[0]!.id;
+
+    // Votes : un par joueur, modifiable ; ne change aucune règle.
+    alice.room.send("vote", { id, approve: false });
+    bob.room.send("vote", { id, approve: true });
+    alice.room.send("vote", { id, approve: true });
+    await settle();
+    expect(alice.snapshot().proposals[id]).toMatchObject({ votesFor: 2, votesAgainst: 0 });
+    expect(JSON.parse(alice.snapshot().settings).laps).toBe(3);
+
+    // Seul l'hôte tranche.
+    bob.room.send("resolveProposal", { id, accept: true });
+    await settle();
+    expect(bob.errors.at(-1).code).toBe("FORBIDDEN");
+    expect(alice.snapshot().proposals[id]).toBeDefined();
+    alice.room.send("resolveProposal", { id, accept: true });
+    await settle();
+    expect(alice.snapshot().proposals).toEqual({});
+    expect(JSON.parse(bob.snapshot().settings).laps).toBe(9);
+    expect(bob.notices.slice(-3)).toEqual([
+      { type: "proposalCreated", name: "Bob", key: "laps" },
+      { type: "settingChanged", key: "laps" },
+      { type: "proposalResolved", key: "laps", accepted: true },
+    ]);
+
+    // Proposition de capacité rejetée par l'hôte : rien ne change.
+    alice.room.send("propose", { key: "capacity", value: 4 });
+    await settle();
+    const [capacityProposal] = Object.values(alice.snapshot().proposals);
+    alice.room.send("resolveProposal", { id: capacityProposal!.id, accept: false });
+    await settle();
+    expect(alice.snapshot().capacity).toBe(8);
+    expect(bob.notices.at(-1)).toEqual({ type: "proposalResolved", key: "capacity", accepted: false });
+
+    // Signalement : accepté sans effet visible, auto-signalement ignoré.
+    bob.room.send("report", { sessionId: alice.room.sessionId, reason: "test" });
+    bob.room.send("report", { sessionId: bob.room.sessionId });
+    await settle();
+    expect(bob.errors.at(-1).code).toBe("FORBIDDEN"); // aucune nouvelle erreur
+    await alice.room.leave();
     await bob.room.leave();
   });
 

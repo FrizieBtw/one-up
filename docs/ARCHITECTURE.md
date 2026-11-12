@@ -54,6 +54,16 @@ Un seul canvas plein écran, non interactif, contient toutes les cartouches. Cha
 (cellule de grille, centre de l'écran, coin supérieur droit) : le DOM garde la mise en page, le clavier et le défilement.
 Le dos de cartouche est un panneau DOM (`role="dialog"`) calé sur la plaque claire du modèle 3D.
 
+## Salle de lobby 3D
+
+- Second canvas plein écran sous l'interface (`apps/web/src/lobby3d/LobbyRoom3D.tsx`) ; le canvas des cartouches reste au-dessus.
+- Déplacement : le client envoie une direction, le serveur simule à 20 Hz avec `stepLobbyPosition` (`packages/shared/src/movement.ts`).
+  Le joueur local est prédit avec la même fonction puis rappelé doucement vers la position serveur ; les autres sont interpolés.
+- Les positions sont lues à chaque image dans l'état Colyseus, sans rendu React (l'interface ignore `x`, `z`, `dx`, `dz`).
+- Avatar chibi procédural unique (`apps/web/src/avatar/Avatar.tsx`) : apparence dérivée de l'identité en attendant l'éditeur (phase 6),
+  animations repos, marche, salut, danse, bravo, rire.
+- Entrées (`apps/web/src/lib/input.ts`) : actions abstraites lues au clavier (codes physiques, donc ZQSD et WASD) ou à la manette (Gamepad API).
+
 ## Authentification
 
 | Mode | Jeton | Vérification côté serveur de jeu |
@@ -86,10 +96,18 @@ Client vers serveur :
 | `chat` | `{ text }` 1 à 200 caractères | 5 messages / 10 s par joueur |
 | `setSetting` | `{ key, value }` | hôte seul, validé par le schéma du jeu |
 | `setCapacity` | `{ capacity }` | hôte seul, entre max(min du jeu, joueurs présents) et max du jeu |
+| `move` | `{ x, z }` direction | normalisée ; le serveur simule la position (vitesse et limites de salle) |
+| `emote` | `{ id }` parmi `EMOTES` | 2 par 3 s, rediffusée à tous |
+| `propose` | `{ key, value }` (`capacity` ou réglage du jeu) | validée par le schéma ; 1 par 10 s et par joueur, 5 ouvertes au plus |
+| `vote` | `{ id, approve }` | un vote par identité, modifiable ; n'applique rien |
+| `resolveProposal` | `{ id, accept }` | hôte seul ; la valeur est revalidée avant application |
+| `report` | `{ sessionId, reason? }` | 3 par minute ; journalisé côté serveur |
 
-Serveur vers client : `chat`, `notice` (`settingChanged`, `capacityChanged`, `hostChanged`), `error` (`RATE_LIMITED`, `INVALID`, `FORBIDDEN`).
+Un message qui ne respecte pas son schéma zod déconnecte le client (comportement de Colyseus) : le client officiel n'en envoie jamais.
 
-État synchronisé (`LobbySnapshot`) : `code`, `gameId`, `isPublic`, `hostSessionId`, `capacity`, `phase`, `settings` (JSON), `players`.
+Serveur vers client : `chat` (texte filtré), `emote`, `notice` (`settingChanged`, `capacityChanged`, `hostChanged`, `proposalCreated`, `proposalResolved`), `error` (`RATE_LIMITED`, `INVALID`, `FORBIDDEN`).
+
+État synchronisé (`LobbySnapshot`) : `code`, `gameId`, `isPublic`, `hostSessionId`, `capacity`, `phase`, `settings` (JSON), `players` (avec position `x`, `z` et direction `dx`, `dz`), `proposals`.
 
 Règles de salon :
 
