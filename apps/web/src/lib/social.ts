@@ -89,14 +89,20 @@ export async function loadMyProfile(userId: string): Promise<MyProfile> {
   };
 }
 
-/** Met à jour la ligne de l'utilisateur, ou la crée si elle n'existe pas encore (les politiques n'autorisent pas l'upsert). */
-async function saveOwnRow(table: "avatar_configurations" | "user_privacy_settings", userId: string, values: Record<string, unknown>) {
+/**
+ * Met à jour la ligne de l'utilisateur, ou la crée si elle n'existe pas encore (les politiques n'autorisent pas l'upsert).
+ * `insertValues` : colonnes de la création, qui peuvent être moins nombreuses que celles de la mise à jour
+ * (les droits d'insertion sont accordés colonne par colonne ; les autres prennent leur valeur par défaut).
+ */
+async function saveOwnRow(table: "avatar_configurations" | "user_privacy_settings", userId: string, values: Record<string, unknown>, insertValues = values) {
   const client = db();
   const updated = list(await client.from(table).update(values).eq("user_id", userId).select("user_id"));
-  if (updated.length === 0) check(await client.from(table).insert({ user_id: userId, ...values }));
+  if (updated.length === 0) check(await client.from(table).insert({ user_id: userId, ...insertValues }));
 }
 
-export const saveAvatar = (userId: string, config: AvatarConfig) => saveOwnRow("avatar_configurations", userId, { config, updated_at: new Date().toISOString() });
+// `updated_at` n'est pas insérable par le client : à la création, la base le fixe elle-même (défaut `now()`).
+export const saveAvatar = (userId: string, config: AvatarConfig) =>
+  saveOwnRow("avatar_configurations", userId, { config, updated_at: new Date().toISOString() }, { config });
 export const savePrivacy = (userId: string, privacy: Privacy) => saveOwnRow("user_privacy_settings", userId, { ...privacy });
 
 // ---------- Amis ----------

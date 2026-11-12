@@ -88,7 +88,12 @@ test("profil, avatar, amis, classements et confidentialité (base simulée)", as
       }
       case "avatar_configurations":
         if (request.method() === "PATCH") return json(route, db.avatar ? ((db.avatar = body), [{ user_id: ME.id }]) : []);
-        if (request.method() === "POST") return ((db.avatar = body.config), json(route, [], 201));
+        // La vraie base n'accorde l'insertion que sur user_id et config : toute autre colonne est refusée (403, 42501).
+        if (request.method() === "POST") {
+          const extra = Object.keys(body).filter((key) => !["user_id", "config"].includes(key));
+          if (extra.length > 0) return json(route, { code: "42501", message: "permission denied for table avatar_configurations" }, 403);
+          return ((db.avatar = body.config), json(route, [], 201));
+        }
         return reply(db.avatar ? [{ config: db.avatar }] : []);
       case "user_privacy_settings":
         if (request.method() === "PATCH") return json(route, db.privacy ? ((db.privacy = { ...db.privacy, ...body }), [{ user_id: ME.id }]) : []);

@@ -84,16 +84,10 @@ Vérifications exécutées le 2026-11-12 :
   lecture et écriture du navigateur sous RLS avec un vrai jeton (profil, avatar, confidentialité, amis) ; appel réel de `record_match` par le serveur de jeu
   avec la clé secrète ; présence réelle entre deux comptes amis. Je ne crée pas de compte sur la base hébergée : à essayer par le porteur,
   idéalement avec deux comptes (e-mail avec confirmation activée par défaut chez Supabase).
-- Les droits d'écriture par colonne (avatar, confidentialité) ont été écrits pour PostgREST mais jamais exercés avec un vrai client : si une
-  sauvegarde échoue avec « permission denied », c'est là.
-- Effets sonores : le code s'exécute sans erreur, mais aucun son n'a été écouté (navigateur de test sans sortie audio).
-- Séquence de lancement quand le jeu charge lentement (état « Chargement du jeu… ») : en local le jeu est prêt avant la fin de l'animation.
-- Commandes de jeu au clavier (T, R) : branchées, mais le parcours automatisé clique sur les boutons.
-- Blackjack à plus de 2 joueurs dans le navigateur : la logique serveur est générique, l'affichage à 6 n'a pas été vu.
-- Transfert d'hôte après 10 s de déconnexion : seul le départ volontaire est testé.
-- Fluidité des animations (cartouches, marche, emotes) : seules des images fixes ont été contrôlées, pas le mouvement ni la fréquence d'images.
-- Animations d'emote : le message réseau est testé, le rendu de l'animation n'a pas été observé.
-- Manette : code écrit (Gamepad API), aucune manette disponible pour l'essayer.
+- Droits d'écriture par colonne (avatar, confidentialité) : une première sauvegarde d'avatar réelle a échoué (« permission denied for table avatar_configurations »,
+  403 PostgREST 42501) parce que l'insertion envoyait aussi `updated_at`, colonne non insérable par le client. Corrigé (`social.ts`) ; le simulacre du
+  parcours de profil refuse désormais toute colonne non accordée et échoue avec l'ancien code. La sauvegarde corrigée n'a pas encore été retentée avec un vrai compte,
+  et la confidentialité (insertion de toutes ses colonnes, accordées) non plus.
 - Prédiction locale sous latence réelle : testée seulement en local, sans latence.
 - Éditeur d'avatar : le rendu du profil et de l'éditeur a été vu sur captures fixes ; l'apparence dans le lobby d'un avatar enregistré est
   couverte par le test serveur (état) mais n'a pas été observée à l'écran.
