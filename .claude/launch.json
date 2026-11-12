@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "web", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "-w", "@stepup/web"], "port": 3000 },
+    { "name": "game-server", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "-w", "@stepup/game-server"], "port": 2567 }
+  ]
+}

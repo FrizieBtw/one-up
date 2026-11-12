@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Design system StepUp : rétro 90s + « Vibrant Playful ». Tous les jetons visuels vivent ici. */
+@theme {
+  --color-cream: #fff4dc;
+  --color-cream-deep: #f7e3b8;
+  --color-ink: #2a1b4d;
+  --color-violet: #6c3bf5;
+  --color-violet-deep: #4a22c4;
+  --color-turquoise: #14c4bd;
+  --color-orange: #ff8a1f;
+  --color-coral: #ff5c6c;
+  --color-sun: #ffd23f;
+
+  --font-display: var(--font-baloo), "Trebuchet MS", sans-serif;
+  --font-sans: var(--font-nunito), system-ui, sans-serif;
+
+  --radius-chunk: 1.5rem;
+  /* Relief « autocollant » : ombre dure décalée, signature visuelle des cartes et boutons. */
+  --shadow-chunk: 0 6px 0 var(--color-ink);
+  --shadow-chunk-sm: 0 3px 0 var(--color-ink);
+}
+
+body {
+  background-color: var(--color-cream);
+  /* Trame de points façon emballage de cartouche */
+  background-image: radial-gradient(var(--color-cream-deep) 2px, transparent 2px);
+  background-size: 24px 24px;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.1;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-violet);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

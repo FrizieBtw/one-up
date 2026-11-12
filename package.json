@@ -1,0 +1,20 @@
+{
+  "name": "stepup",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*", "packages/games/*"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "concurrently -n server,web -c magenta,cyan \"npm run dev -w @stepup/game-server\" \"npm run dev -w @stepup/web\"",
+    "build": "npm run build -w @stepup/web",
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:start": "supabase start",
+    "db:reset": "supabase db reset"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "supabase": "^3.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
