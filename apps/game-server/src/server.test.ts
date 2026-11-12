@@ -381,6 +381,13 @@ describe("lobby room", () => {
     }
   });
 
+  it("presence routes require a registered account", async () => {
+    expect((await http("/presence")).status).toBe(401);
+    expect((await http("/presence/ping", { method: "POST" })).status).toBe(401);
+    const guest = issueGuestToken("Alice").token; // les invités n'ont pas de présence
+    expect((await http("/presence", { headers: { Authorization: `Bearer ${guest}` } })).status).toBe(401);
+  });
+
   it("issues guest tokens over HTTP and validates names", async () => {
     const post = (name: unknown) =>
       http("/auth/guest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
@@ -389,5 +396,24 @@ describe("lobby room", () => {
     const { token, identity } = await ok.json();
     expect(verifyGuestToken(token)).toEqual(identity);
     expect((await post("x")).status).toBe(400);
+  });
+});
+
+describe("presence store", () => {
+  it("tracks online, room and expiry", async () => {
+    const { createPresenceStore } = await import("./presence");
+    let now = 0;
+    const store = createPresenceStore(() => now);
+    expect(store.get("u")).toEqual({ userId: "u", status: "offline" });
+    store.ping("u");
+    expect(store.get("u").status).toBe("online");
+    now = 80_000; // au-delà du délai d'expiration
+    expect(store.get("u").status).toBe("offline");
+    store.setRoom("u", "lobby", "kart");
+    expect(store.get("u")).toEqual({ userId: "u", status: "lobby", gameId: "kart" });
+    store.setRoom("u", "playing", "kart");
+    expect(store.get("u").status).toBe("playing");
+    store.clearRoom("u");
+    expect(store.get("u").status).toBe("online");
   });
 });

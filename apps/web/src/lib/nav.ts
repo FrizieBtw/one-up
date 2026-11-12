@@ -9,7 +9,7 @@ export type CartridgePanel = "menu" | "search" | "code" | "create";
 // États de navigation : accueil → cartouche sélectionnée (dos visible) → lobby.
 // Une seule page et une seule scène 3D : les transitions sont continues, l'URL suit via l'historique.
 interface Nav {
-  view: "home" | "cartridge" | "lobby";
+  view: "home" | "cartridge" | "lobby" | "profile";
   /** Jeu de la cartouche sélectionnée, ou du salon une fois son état reçu. */
   gameId: string | null;
   panel: CartridgePanel;
@@ -33,6 +33,7 @@ interface Nav {
   /** Retour d'un cran (Échap, bouton retour). Ne quitte jamais un salon. */
   back(): void;
   goHome(): void;
+  openProfile(): void;
   syncFromUrl(): void;
 }
 
@@ -71,13 +72,22 @@ export const useNav = create<Nav>((set, get) => ({
     set({ view: "home", gameId: null, code: null, settingsOpen: false, launch: "idle" });
     setUrl("/");
   },
+  openProfile: () => {
+    void leaveLobby();
+    set({ view: "profile", gameId: null, code: null, settingsOpen: false, launch: "idle" });
+    setUrl("/profile");
+  },
   syncFromUrl: () => {
+    if (window.location.pathname === "/profile") {
+      void leaveLobby();
+      return set({ view: "profile", gameId: null, code: null, settingsOpen: false });
+    }
     const match = window.location.pathname.match(/^\/lobby\/([^/]+)$/);
     const code = match ? normalizeRoomCode(decodeURIComponent(match[1]!)) : null;
     const state = get();
     if (code) {
       if (state.view !== "lobby" || state.code !== code) set({ view: "lobby", code, gameId: null, settingsOpen: false });
-    } else if (state.view === "lobby") {
+    } else if (state.view === "lobby" || state.view === "profile") {
       void leaveLobby();
       set({ view: "home", gameId: null, code: null, settingsOpen: false });
     }

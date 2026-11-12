@@ -85,6 +85,8 @@ HTTP :
 | `GET /health` | état du serveur |
 | `POST /auth/guest` | jeton invité (limité à 10/min par IP) |
 | `GET /rooms?game=<id>` | salons publics d'un jeu (`PublicRoomInfo[]`) |
+| `POST /presence/ping` | un compte se signale en ligne (jeton `Authorization: Bearer`, comptes seulement) |
+| `GET /presence` | présence des amis du compte, filtrée par leurs réglages |
 
 Création : `client.create("lobby", { gameId, isPublic })`. Le code du salon (6 caractères) est l'identifiant de salle : jointure par `client.joinById(code)`.
 
@@ -118,6 +120,20 @@ Règles de salon :
 - Changer une règle ne réinitialise pas les statuts « prêt ».
 - Déconnexion : siège conservé 60 s (`RECONNECT_WINDOW_SECONDS`). Le client reprend son siège après un rechargement grâce au jeton de reconnexion (sessionStorage).
 - Hôte : s'il part, ou reste déconnecté plus de 10 s (`HOST_GRACE_SECONDS`), le rôle passe au joueur connecté le plus ancien. Un hôte revenu après transfert ne récupère pas le rôle.
+
+## Profils, avatars, amis et présence
+
+- Vue `profile` de la coquille unique (`/profile`, comptes seulement) : profil (niveau, statistiques, succès), éditeur d'avatar avec aperçu 3D,
+  amis, classements (mondial et entre amis, par XP), confidentialité. Données : `apps/web/src/lib/social.ts`, sous RLS.
+- Avatar : options gratuites définies dans `packages/shared/src/avatar.ts` (teint, coiffure, couleur de cheveux, yeux, tenue) ; un seul composant `Avatar`
+  sert profil, lobby et table de jeu. À la connexion d'un compte, le serveur lit l'avatar enregistré, le revalide (`parseAvatarConfig`) et le place
+  dans l'état du joueur ; invités et comptes sans avatar reçoivent l'apparence par défaut dérivée de leur identité.
+- L'invitation à personnaliser l'avatar est facultative : « Plus tard » la masque sur l'appareil.
+- Présence (`apps/game-server/src/presence.ts`, en mémoire) : « en ligne » tant que le navigateur d'un compte envoie `POST /presence/ping` (toutes les 30 s,
+  valable 75 s), « dans un lobby » ou « en partie » tant qu'il occupe un salon. `GET /presence` renvoie la présence des seuls amis, filtrée par leur réglage :
+  masqué = « hors ligne », sans autre indice.
+- Récompenses : à la fin d'une session, le serveur calcule le classement, appelle `record_match`, puis envoie à chaque compte le message `rewards`
+  (XP gagnée, XP totale, succès débloqués), affiché sur l'écran de résultats. Les invités n'ont ni progression ni récompenses.
 
 ## Cycle de partie
 
@@ -178,17 +194,41 @@ Hypothèse à confirmer : capacité maximale du blackjack fixée à 6.
 
 ## Base de données
 
-Migration actuelle : `profiles` (pseudo unique insensible à la casse, `public_id` court pour la recherche d'amis),
-créé automatiquement à l'inscription par le déclencheur `handle_new_user`. RLS : lecture publique (aucun e-mail), mise à jour du seul pseudo par son propriétaire.
+Projet Supabase hébergé `OneUP` (région eu-west-3) ; les migrations de `supabase/migrations` y ont été appliquées avec leur contenu
+(les versions affichées par Supabase portent leur propre horodatage). Accès aux données : le navigateur lit et écrit sous RLS avec le jeton
+de l'utilisateur ; le serveur de jeu écrit avec la clé `service_role`. Les fonctions d'aide aux politiques vivent dans le schéma `private`,
+non exposé par l'API.
 
-Résultats (phase 4) : `game_sessions`, `session_participants`, `player_stats`. Lecture publique, aucune écriture client.
-Le serveur de jeu appelle `record_match` avec la clé `service_role` ; l'identifiant de session sert de clé d'idempotence.
-Pas de table `match_results` séparée : `session_participants` porte le résultat de chaque joueur.
+| Migration | Contenu |
+| --- | --- |
+| `…000000_profiles` | `profiles` (pseudo unique insensible à la casse, `public_id` court), déclencheur d'inscription |
+| `…000100_match_results` | `game_sessions`, `session_participants`, `player_stats`, première `record_match` |
+| `…000200_revoke_handle_new_user` | retire l'exécution publique du déclencheur d'inscription |
+| `…000300_social_progression` | avatars, confidentialité, amis, progression, succès, nouvelle `record_match` |
+| `…000400_backfill_profiles` | crée le profil des comptes antérieurs au déclencheur |
+
+Règles d'accès :
+
+- `avatar_configurations` : lecture publique ; chacun écrit seulement sa ligne (forme et taille bornées ; contenu revalidé par le serveur de jeu).
+- `user_privacy_settings` : visible et modifiable par son propriétaire seul. Réglages : `presence`, `friend_requests`, `show_stats`.
+- `friend_requests`, `friendships` : visibles des seules parties. Aucune écriture directe : les fonctions `send_friend_request`,
+  `respond_friend_request`, `remove_friend` valident tout (demande croisée acceptée d'office, doublons, refus de réception,
+  10 demandes par heure et 30 en attente au plus). Un expéditeur peut annuler sa propre demande.
+- `search_profiles` : préfixe de pseudo ou identifiant court exact, jokers LIKE neutralisés, 10 résultats au plus, soi-même exclu.
+- `progression` (XP), `achievements`, `user_achievements`, `player_stats`, `session_participants` : lecture seule pour les clients.
+  Les statistiques, parties et succès suivent `show_stats` (tous, amis, personne) via `private.can_view_stats` ; le niveau et l'XP restent publics (classements).
+- `record_match` : exécutable par `service_role` seul. Idempotente (l'identifiant de session sert de clé). Enregistre la session et les statistiques,
+  attribue l'XP et débloque les succès, et renvoie les récompenses de chaque joueur.
+
+Progression (`packages/shared/src/progression.ts`) : le niveau n s'atteint à 50·n·(n−1) XP cumulés.
+XP par session : 20 de participation, 10 par manche gagnée, 5 par égalité, 25 si premier d'une session à 2 joueurs ou plus.
+Succès : première table, premier coup gagnant, habitué (5 sessions), main chanceuse (25 manches gagnées), champion de table (3 sessions gagnées).
 
 Tables à venir, chacune dans la migration de sa phase :
 
-- Phase 6 : `avatar_configurations`, `friendships`, `friend_requests`, `user_privacy_settings`, `progression`, `achievements`, `user_achievements`
 - Phase 7 : `wallets`, `wallet_transactions`, `shop_items`, `user_inventory`, `missions`, `mission_progress`
+
+Pas de table `match_results` séparée : `session_participants` porte le résultat de chaque joueur.
 
 ## Phases et dépendances
 

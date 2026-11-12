@@ -51,26 +51,28 @@ export interface SessionView {
   loaded: boolean;
   name: string | null;
   kind: Identity["kind"] | null;
+  /** Identifiant du compte (comptes uniquement). */
+  userId: string | null;
 }
 
 export function useSession(): SessionView {
   const guest = useGuest((s) => s.guest);
   const [loaded, setLoaded] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
+  const [account, setAccount] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!supabase) return setLoaded(true);
     const client = supabase;
     const sync = async (userId: string | undefined) => {
-      if (!userId) return setUserName(null);
+      if (!userId) return setAccount(null);
       const { data } = await client.from("profiles").select("username").eq("id", userId).single();
-      setUserName(data?.username ?? null);
+      setAccount(data?.username ? { id: userId, name: data.username } : null);
     };
     client.auth.getSession().then(({ data }) => sync(data.session?.user.id).finally(() => setLoaded(true)));
     const { data } = client.auth.onAuthStateChange((_event, session) => void sync(session?.user.id));
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (userName) return { loaded, name: userName, kind: "user" };
-  return { loaded, name: guest?.identity.name ?? null, kind: guest ? "guest" : null };
+  if (account) return { loaded, name: account.name, kind: "user", userId: account.id };
+  return { loaded, name: guest?.identity.name ?? null, kind: guest ? "guest" : null, userId: null };
 }

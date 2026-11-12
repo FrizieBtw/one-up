@@ -3,7 +3,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { CanvasTexture, MathUtils, SRGBColorSpace, type Group } from "three";
-import type { BlackjackSnapshot, CardSnapshot } from "@stepup/shared";
+import { parseAvatarConfig, type BlackjackSnapshot, type CardSnapshot } from "@stepup/shared";
 import { Avatar, lookFromId, type AvatarLook, type AvatarPose } from "@/avatar/Avatar";
 import { useNav } from "@/lib/nav";
 
@@ -123,7 +123,7 @@ function Seat({ name, look, angle, cards, isTurn, won }: { name: string; look: A
 }
 
 /** Table de Blackjack Battle : croupier au fond, joueurs en arc de cercle devant la caméra. */
-export default function BlackjackTable3D({ blackjack, identities }: { blackjack: BlackjackSnapshot; identities: Record<string, string> }) {
+export default function BlackjackTable3D({ blackjack, identities }: { blackjack: BlackjackSnapshot; identities: Record<string, { id: string; avatar: string }> }) {
   const dealerPose = useRef<AvatarPose>({ moving: false, emote: null });
   // La séquence de lancement attend ce signal : scène chargée et contexte WebGL créé.
   useEffect(() => () => useNav.getState().setGameReady(false), []);
@@ -131,7 +131,10 @@ export default function BlackjackTable3D({ blackjack, identities }: { blackjack:
   const arc = Math.min(1.25, 0.35 * seats.length);
   const looks = useMemo(() => new Map<string, AvatarLook>(), []);
   const lookOf = (sessionId: string) => {
-    if (!looks.has(sessionId)) looks.set(sessionId, lookFromId(identities[sessionId] ?? sessionId));
+    if (!looks.has(sessionId)) {
+      const who = identities[sessionId];
+      looks.set(sessionId, parseAvatarConfig(who?.avatar) ?? lookFromId(who?.id ?? sessionId));
+    }
     return looks.get(sessionId)!;
   };
 

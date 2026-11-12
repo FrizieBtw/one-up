@@ -8,6 +8,7 @@ import {
   EMOTES,
   EMOTE_DURATION_MS,
   LOBBY_RADIUS,
+  parseAvatarConfig,
   stepLobbyPosition,
   type ClientMessage,
   type EmoteId,
@@ -31,7 +32,7 @@ function AvatarEntity({ room, sessionId, isLocal, connected, emotes }: { room: R
   const local = useRef({ placed: false, sentX: 0, sentZ: 0, sentAt: 0 });
   // Identité et nom ne changent pas pendant la vie d'une session.
   const initial = (room.state.players as LivePlayers).get(sessionId);
-  const look = useMemo(() => lookFromId(initial?.id ?? sessionId), [initial?.id, sessionId]);
+  const look = useMemo(() => parseAvatarConfig(initial?.avatar) ?? lookFromId(initial?.id ?? sessionId), [initial?.avatar, initial?.id, sessionId]);
 
   useFrame((_, delta) => {
     const player = (room.state.players as LivePlayers).get(sessionId);

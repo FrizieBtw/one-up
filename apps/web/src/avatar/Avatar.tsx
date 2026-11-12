@@ -3,24 +3,16 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { CanvasTexture, MathUtils, SRGBColorSpace, type Group } from "three";
-import type { EmoteId } from "@stepup/shared";
+import { AVATAR_OPTIONS, type AvatarConfig, type EmoteId } from "@stepup/shared";
 
 // Avatar chibi original, entièrement procédural (sphères et capsules) : un seul composant,
 // réutilisé partout (lobby aujourd'hui ; profil, jeux et résultats ensuite).
 
-export interface AvatarLook {
-  skin: string;
-  hair: string;
-  outfit: string;
-  hairStyle: 0 | 1 | 2;
-  eyeStyle: 0 | 1;
-}
+/** Apparence d'un avatar : la même forme que la configuration enregistrée (`AvatarConfig`). */
+/** Un `AvatarConfig` est toujours un `AvatarLook` ; les personnages non joueurs (croupier) peuvent sortir de la palette. */
+export type AvatarLook = Omit<AvatarConfig, "skin" | "hair" | "outfit"> & { skin: string; hair: string; outfit: string };
 
-const SKINS = ["#ffd9b8", "#f2b98f", "#c98a5e", "#8a5a3c"];
-const HAIRS = ["#2a1b4d", "#6b3a1e", "#f2c14e", "#ff5c6c", "#14c4bd", "#f4f0ff"];
-const OUTFITS = ["#6c3bf5", "#14c4bd", "#ff8a1f", "#ff5c6c", "#ffd23f", "#3fa7ff"];
-
-/** Apparence par défaut, stable pour une identité donnée (remplacée par l'éditeur d'avatar en phase 6). */
+/** Apparence par défaut, stable pour une identité donnée : invités et comptes sans avatar personnalisé. */
 export function lookFromId(id: string): AvatarLook {
   let hash = 2166136261;
   for (let i = 0; i < id.length; i++) hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
@@ -29,9 +21,9 @@ export function lookFromId(id: string): AvatarLook {
     return (hash >>> 0) % n;
   };
   return {
-    skin: SKINS[pick(SKINS.length)]!,
-    hair: HAIRS[pick(HAIRS.length)]!,
-    outfit: OUTFITS[pick(OUTFITS.length)]!,
+    skin: AVATAR_OPTIONS.skin[pick(AVATAR_OPTIONS.skin.length)]!,
+    hair: AVATAR_OPTIONS.hair[pick(AVATAR_OPTIONS.hair.length)]!,
+    outfit: AVATAR_OPTIONS.outfit[pick(AVATAR_OPTIONS.outfit.length)]!,
     hairStyle: pick(3) as AvatarLook["hairStyle"],
     eyeStyle: pick(2) as AvatarLook["eyeStyle"],
   };

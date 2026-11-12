@@ -24,6 +24,15 @@ Sans configuration, la plateforme tourne en mode invité : pseudo, cartouches 3D
 
 ## Comptes (Supabase)
 
+Deux options : un projet Supabase hébergé (utilisé pendant le développement) ou une pile locale sous Docker.
+
+**Projet hébergé** : appliquer les fichiers de `supabase/migrations` dans l'ordre (éditeur SQL du tableau de bord, ou `supabase db push` une fois la CLI liée),
+puis renseigner `apps/web/.env.local` (URL et clé publique) et `apps/game-server/.env.local` (URL, clé publique et, côté serveur uniquement,
+la clé secrète `SUPABASE_SERVICE_ROLE_KEY`, nécessaire à l'enregistrement des résultats). Dans le tableau de bord : activer la protection contre les
+mots de passe compromis, ajouter `http://localhost:3000` aux URL de redirection, et activer Google et Discord avec vos identifiants OAuth.
+
+**Pile locale (Docker)** :
+
 1. Démarrer Docker Desktop.
 2. `npm run db:start` : lance Supabase en local et applique les migrations de `supabase/migrations`.
 3. Copier l'URL de l'API et la clé `anon` affichées dans :
@@ -40,7 +49,7 @@ puis passer `enabled = true` dans les sections `[auth.external.google]` et `[aut
 | Commande | Rôle |
 | --- | --- |
 | `npm run dev` | Serveur de jeu et web en parallèle |
-| `npm test` | Tests Vitest (unitaires et intégration du serveur de jeu) |
+| `npm test` | Tests Vitest (règles, protocole, serveur de jeu avec vrais clients, comptes simulés) |
 | `npm run test:e2e` | Parcours Playwright (avant la première fois : `npx playwright install chromium`) |
 | `npm run typecheck` | Vérification TypeScript de tous les paquets |
 | `npm run build` | Build de production du web |

@@ -2,16 +2,20 @@
 
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
+import { PRESENCE_PING_SECONDS } from "@stepup/shared";
 import { APP_NAME, getGame } from "@stepup/shared";
 import { BIG_CARTRIDGE_CLASS, CENTER_ANCHOR, anchor } from "@/cartridge/anchors";
 import { useAudio } from "@/lib/audio";
 import { useNav } from "@/lib/nav";
+import { pingPresence } from "@/lib/social";
 import { logout, useSession } from "@/lib/session";
 import { AuthPanel } from "./AuthPanel";
 import { CartridgeBack } from "./CartridgeBack";
 import { CartridgeGrid } from "./CartridgeGrid";
 import { HomePanels } from "./HomePanels";
 import { LobbyScreen } from "./LobbyScreen";
+import { AvatarInvite } from "./profile/AvatarInvite";
+import { ProfileScreen } from "./profile/ProfileScreen";
 import { Badge, Button } from "./ui";
 
 // WebGL : rendu côté client uniquement.
@@ -38,6 +42,14 @@ export function StepUpApp() {
 
   const signedIn = session.loaded && session.name !== null;
   const audio = useAudio();
+
+  // Un compte signale régulièrement qu'il est en ligne (les amis le voient selon ses réglages de confidentialité).
+  useEffect(() => {
+    if (session.kind !== "user") return;
+    pingPresence();
+    const timer = setInterval(pingPresence, PRESENCE_PING_SECONDS * 1000);
+    return () => clearInterval(timer);
+  }, [session.kind]);
 
   return (
     <>
@@ -69,6 +81,11 @@ export function StepUpApp() {
             <div className="flex items-center gap-3">
               <span className="font-bold">{session.name}</span>
               <Badge className={session.kind === "guest" ? "bg-sun" : "bg-turquoise"}>{session.kind === "guest" ? "Invité" : "Compte"}</Badge>
+              {session.kind === "user" && view !== "lobby" && view !== "profile" && (
+                <Button variant="calm" onClick={() => useNav.getState().openProfile()}>
+                  Mon profil
+                </Button>
+              )}
               {view !== "lobby" && (
                 <Button variant="plain" onClick={() => void logout()}>
                   Déconnexion
@@ -84,8 +101,19 @@ export function StepUpApp() {
           <AuthPanel />
         ) : view === "lobby" && code ? (
           <LobbyScreen key={code} code={code} />
+        ) : view === "profile" ? (
+          session.userId ? (
+            <ProfileScreen userId={session.userId} onHome={() => useNav.getState().goHome()} />
+          ) : (
+            <p role="alert" className="font-bold">
+              Le profil est réservé aux comptes. Les invités n'ont pas de progression enregistrée.
+            </p>
+          )
         ) : (
-          <CartridgeGrid />
+          <>
+            {session.userId && <AvatarInvite userId={session.userId} />}
+            <CartridgeGrid />
+          </>
         )}
       </main>
 

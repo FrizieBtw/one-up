@@ -1,9 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { handValue, type Rank } from "@stepup/blackjack";
-import type { BlackjackPlayerSnapshot, CardSnapshot, ClientMessage, ClientMessageType, LobbySnapshot } from "@stepup/shared";
+import { levelProgress, type BlackjackPlayerSnapshot, type CardSnapshot, type ClientMessage, type ClientMessageType, type LobbySnapshot, type ServerMessages } from "@stepup/shared";
+import { loadAchievementTitles } from "@/lib/social";
 import { Badge, Button, Card } from "@/components/ui";
 import { attachInput, readGamepadPresses, useInputDevice } from "@/lib/input";
 
@@ -28,6 +29,8 @@ export function BlackjackScreen({
   send,
   chat,
   onQuit,
+  rewards,
+  onBackToLobby,
 }: {
   state: LobbySnapshot;
   sessionId: string;
@@ -35,7 +38,14 @@ export function BlackjackScreen({
   send: Send;
   chat: ReactNode;
   onQuit: () => void;
+  /** Récompenses de fin de session (comptes enregistrés uniquement). */
+  rewards: ServerMessages["rewards"] | null;
+  onBackToLobby: () => void;
 }) {
+  const [achievementTitles, setAchievementTitles] = useState<string[]>([]);
+  useEffect(() => {
+    if (rewards) void loadAchievementTitles(rewards.achievements).then(setAchievementTitles, () => setAchievementTitles(rewards.achievements));
+  }, [rewards]);
   const bj = state.blackjack;
   const device = useInputDevice();
   const me = bj.players[sessionId];
@@ -63,7 +73,7 @@ export function BlackjackScreen({
     };
   }, [myTurn, send]);
 
-  const identities = Object.fromEntries(Object.entries(state.players).map(([id, player]) => [id, player.id]));
+  const identities = Object.fromEntries(Object.entries(state.players).map(([id, player]) => [id, { id: player.id, avatar: player.avatar }]));
 
   if (state.phase === "results") {
     return (
@@ -106,9 +116,25 @@ export function BlackjackScreen({
               })}
             </tbody>
           </table>
+          {rewards ? (
+            <div className="mt-4 rounded-xl border-2 border-ink bg-cream p-3 font-bold">
+              <p>
+                +{rewards.xpGained} XP · Niveau {levelProgress(rewards.xp).level} ({rewards.xp} XP au total)
+              </p>
+              {achievementTitles.length > 0 && <p className="text-sm">Succès débloqués : {achievementTitles.join(", ")}</p>}
+            </div>
+          ) : (
+            <p className="mt-4 text-xs font-bold text-ink/70">Les invités ne gagnent ni XP ni succès : créez un compte pour conserver votre progression.</p>
+          )}
           <div className="mt-5 flex flex-wrap items-center gap-3">
             {isHost ? (
-              <Button variant="accent" onClick={() => send("backToLobby", {})}>
+              <Button
+                variant="accent"
+                onClick={() => {
+                  onBackToLobby();
+                  send("backToLobby", {});
+                }}
+              >
                 Retour au lobby
               </Button>
             ) : (

@@ -93,3 +93,33 @@ describe("chat filter", () => {
     expect(filterChat("un pdf")).toBe("un pdf"); // pas de faux positif sur une sous-chaîne
   });
 });
+
+describe("progression, avatar and presence", () => {
+  it("computes levels from XP", async () => {
+    const { levelFromXp, levelProgress, xpForLevel } = await import("./progression");
+    expect([0, 99, 100, 299, 300, 599, 600].map(levelFromXp)).toEqual([1, 1, 2, 2, 3, 3, 4]);
+    for (let level = 1; level < 60; level++) {
+      expect(levelFromXp(xpForLevel(level))).toBe(level);
+      expect(levelFromXp(xpForLevel(level + 1) - 1)).toBe(level);
+    }
+    expect(levelProgress(150)).toEqual({ level: 2, into: 50, needed: 200 });
+  });
+  it("accepts only avatars made of allowed options", async () => {
+    const { parseAvatarConfig, AVATAR_OPTIONS } = await import("./avatar");
+    const ok = { skin: AVATAR_OPTIONS.skin[0], hair: AVATAR_OPTIONS.hair[1], outfit: AVATAR_OPTIONS.outfit[2], hairStyle: 2, eyeStyle: 1 };
+    expect(parseAvatarConfig(ok)).toEqual(ok);
+    expect(parseAvatarConfig(JSON.stringify(ok))).toEqual(ok);
+    expect(parseAvatarConfig({ ...ok, skin: "#000000" })).toBeNull();
+    expect(parseAvatarConfig({ ...ok, hairStyle: 9 })).toBeNull();
+    expect(parseAvatarConfig("{pas du json")).toBeNull();
+    expect(parseAvatarConfig(null)).toBeNull();
+  });
+  it("hides presence according to the target's setting", async () => {
+    const { visiblePresence } = await import("./presence");
+    const entry = { userId: "u", status: "playing", gameId: "blackjack" } as const;
+    expect(visiblePresence(entry, "everyone", false)).toEqual(entry);
+    expect(visiblePresence(entry, "friends", true)).toEqual(entry);
+    expect(visiblePresence(entry, "friends", false)).toEqual({ userId: "u", status: "offline" });
+    expect(visiblePresence(entry, "nobody", true)).toEqual({ userId: "u", status: "offline" });
+  });
+});

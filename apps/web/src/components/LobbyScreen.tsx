@@ -57,6 +57,7 @@ function useLobbyRoom(code: string) {
   const [error, setError] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedLine[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<ServerMessages["rewards"] | null>(null);
   const feedKey = useRef(0);
 
   const push = useCallback(
@@ -81,6 +82,7 @@ function useLobbyRoom(code: string) {
 
         on("chat", (m) => push({ fromId: m.fromId, name: m.name, text: m.text }));
         on("error", (m) => push({ text: m.message }));
+        on("rewards", setRewards);
         on("notice", (m) => {
           switch (m.type) {
             case "hostChanged":
@@ -137,11 +139,11 @@ function useLobbyRoom(code: string) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  return { room, state, online, error, feed, notice, push };
+  return { room, state, online, error, feed, notice, push, rewards, clearRewards: () => setRewards(null) };
 }
 
 export function LobbyScreen({ code }: { code: string }) {
-  const { room, state, online, error, feed, notice, push } = useLobbyRoom(code);
+  const { room, state, online, error, feed, notice, push, rewards, clearRewards } = useLobbyRoom(code);
   const goHome = useNav((s) => s.goHome);
   const settingsOpen = useNav((s) => s.settingsOpen);
   const setSettingsOpen = useNav((s) => s.setSettingsOpen);
@@ -272,7 +274,7 @@ export function LobbyScreen({ code }: { code: string }) {
       <>
         {miniCartridge}
         <LaunchSequence title={game.title} />
-        <BlackjackScreen state={state} sessionId={room.sessionId} isHost={isHost} send={send} chat={chatCard} onQuit={goHome} />
+        <BlackjackScreen state={state} sessionId={room.sessionId} isHost={isHost} send={send} chat={chatCard} onQuit={goHome} rewards={rewards} onBackToLobby={clearRewards} />
       </>
     );
   }

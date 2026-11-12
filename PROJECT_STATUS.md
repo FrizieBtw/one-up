@@ -5,12 +5,14 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
 
 ## Phase en cours
 
-- **Phase 1 — Fondations** : terminée côté invité ; comptes Supabase écrits mais non vérifiés.
+- **Phase 1 — Fondations** : terminée ; comptes Supabase configurés (projet hébergé `OneUP`), inscription et connexion réelles non testées.
 - **Phase 2 — Accueil et cartouches** : terminée. Sons de cartouche non faits.
 - **Phase 3 — Lobbies sociaux** : terminée.
-- **Phase 4 — Blackjack Battle** : terminée pour les invités ; sauvegarde des statistiques écrite mais non vérifiée.
-- **Phase 5 — Console et transitions** : terminée (branche `phase-5-console`).
-- Prochaine : **phase 6** (profils, éditeur d'avatar, amis, présence, XP, succès, classements). Elle exige Supabase, donc Docker démarré.
+- **Phase 4 — Blackjack Battle** : terminée ; enregistrement des résultats vérifié en SQL et côté serveur (simulé), pas encore de bout en bout avec un vrai compte.
+- **Phase 5 — Console et transitions** : terminée.
+- **Phase 6 — Profils et progression** : terminée (branche `phase-6-profils`) sauf les invitations de salon entre amis et l'historique de parties affiché.
+  Le critère « les données persistent entre les sessions » est vérifié en SQL et par tests simulés, pas avec un vrai compte.
+- Prochaine : **phase 7** (jetons, missions, boutique, inventaire).
 
 ## Ce qui fonctionne réellement (vérifié)
 
@@ -42,28 +44,48 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
   Bouton « Passer l'animation », qui ne fait jamais entrer avant que le jeu soit prêt.
 - Effets sonores synthétisés (sélection, retournement, insertion, prêt) avec bouton muet et volume des effets, mémorisés.
 - Modération de premier niveau : filtre de mots côté serveur, blocage local d'un joueur (messages masqués), signalement journalisé.
+- Base Supabase `OneUP` : 5 migrations appliquées (profils, résultats, avatars, confidentialité, amis, progression, succès, rattrapage de profil).
+  Un compte existait avant le déclencheur d'inscription et n'avait pas de profil : il a été rattrapé.
+- Profil (`/profile`, comptes) : niveau et barre d'XP, statistiques par jeu, succès, identifiant court, aperçu 3D animé de l'avatar.
+- Éditeur d'avatar : teint, coiffure, couleur de cheveux, yeux, tenue (options gratuites), aperçu 3D, enregistrement. Invitation facultative à
+  personnaliser après l'inscription. L'avatar enregistré apparaît dans les lobbies et à la table de blackjack ; défaut dérivé de l'identité sinon.
+- Amis : recherche par pseudo ou identifiant, demandes envoyées, reçues, acceptées, refusées, annulées, retrait, anti-spam (10 par heure, 30 en attente).
+- Présence : en ligne, dans un lobby, en partie (avec le jeu), pour les amis, selon les réglages de confidentialité de chacun.
+- Confidentialité : présence, statistiques et demandes d'ami réglables (tous, amis, personne).
+- XP et niveaux calculés côté serveur à la fin d'une session ; succès (5) ; récompenses affichées sur l'écran de résultats ; classements mondial et entre amis.
 
 Vérifications exécutées le 2026-11-12 :
 
-- `npm test` : 25 tests réussis. Blackjack : règles pures (as, naturel, croupier, résolution) et une partie complète côté serveur
+- `npm test` : 33 tests réussis. Phase 6 : niveaux, avatars valides, présence masquée, et un fichier de comptes simulés
+  (`accounts.test.ts`, authentification et base simulées) qui vérifie l'avatar relu et revalidé, le classement calculé par le serveur et transmis
+  une seule fois, l'envoi des récompenses au bon compte, la présence tout au long d'une session et son filtrage par confidentialité, l'absence
+  d'avatar et de présence pour un invité. Blackjack : règles pures (as, naturel, croupier, résolution) et une partie complète côté serveur
   avec paquet truqué (conditions de lancement, annulations, entrée refusée en cours de partie, carte cachée absente de l'état,
   action hors tour refusée, chrono, manche automatique, départ de l'hôte pendant son tour, résultats, retour au lobby).
-- `npm run test:e2e` : deux parcours Playwright réussis (Chromium). Blackjack à deux joueurs : recherche publique avec un salon listé,
+- `npm run test:e2e` : trois parcours Playwright réussis (Chromium), exécutés en séquence (en parallèle, la charge les rendait intermittents).
+  Le parcours du profil utilise une base Supabase simulée dans le navigateur : il vérifie l'interface et ses appels, pas la vraie base.
+  Il couvre l'invitation d'avatar, le profil, l'édition et l'enregistrement de l'avatar, la recherche, l'envoi, l'acceptation et l'annulation de demandes,
+  la présence, les classements, la confidentialité.
+  Deux parcours existants : Blackjack à deux joueurs : recherche publique avec un salon listé,
   lancement bloqué puis permis, annulation, séquence de console regardée par un joueur et passée par l'autre, réglage du son, deux manches, chat en jeu, résultats, retour au lobby. Lobby avec 4 joueurs : dos de cartouche, Échap, création privée, code inconnu refusé,
   jointure par code, salon privé absent de la recherche, règles au dos de la mini cartouche, annonce reçue, proposition, votes et validation,
   déplacement au clavier vu par l'autre joueur, chat filtré, blocage et déblocage, signalement, lien de partage, rechargement sans doublon,
   départ de l'hôte et transfert du rôle.
 - `npm run typecheck` et `npm run build` : sans erreur.
 - Rendu contrôlé sur captures d'écran Playwright (grille, dos de cartouche, règles, propositions, salle 3D, table de blackjack,
-  fin de manche, résultats, console avec cartouche insérée).
+  fin de manche, résultats, console avec cartouche insérée, profil, éditeur d'avatar, amis).
+- Base hébergée : un bloc SQL volontairement annulé a exercé `record_match` (XP 65 et 25, idempotence, succès débloqués, statistiques non doublées),
+  les fonctions d'amis (envoi, doublon, auto-demande, demande croisée acceptée, refus de réception, réponse réservée au destinataire),
+  la confidentialité des statistiques et la recherche (jokers neutralisés). Rien n'est resté dans la base. Contrôle de sécurité Supabase relu.
 
 ## Écrit mais non vérifié
 
-- **Comptes Supabase** (e-mail, Google, Discord) : formulaire web, vérification du jeton côté serveur et migration `profiles`.
-  Docker était arrêté : ni la migration SQL ni la connexion par compte n'ont été exécutées.
-  Pour vérifier : démarrer Docker Desktop, `npm run db:start`, remplir les fichiers `.env` (voir README), tester inscription et connexion.
-- **Sauvegarde des statistiques** : migration `match_results` et appel `record_match` écrits, jamais exécutés (Docker arrêté).
-  Elle ne concerne que les comptes ; avec des invités, rien n'est enregistré.
+- **Parcours réel avec un compte** : inscription et connexion par e-mail, Google, Discord ; vérification du jeton par le serveur de jeu ;
+  lecture et écriture du navigateur sous RLS avec un vrai jeton (profil, avatar, confidentialité, amis) ; appel réel de `record_match` par le serveur de jeu
+  avec la clé secrète ; présence réelle entre deux comptes amis. Je ne crée pas de compte sur la base hébergée : à essayer par le porteur,
+  idéalement avec deux comptes (e-mail avec confirmation activée par défaut chez Supabase).
+- Les droits d'écriture par colonne (avatar, confidentialité) ont été écrits pour PostgREST mais jamais exercés avec un vrai client : si une
+  sauvegarde échoue avec « permission denied », c'est là.
 - Effets sonores : le code s'exécute sans erreur, mais aucun son n'a été écouté (navigateur de test sans sortie audio).
 - Séquence de lancement quand le jeu charge lentement (état « Chargement du jeu… ») : en local le jeu est prêt avant la fin de l'animation.
 - Commandes de jeu au clavier (T, R) : branchées, mais le parcours automatisé clique sur les boutons.
@@ -73,17 +95,27 @@ Vérifications exécutées le 2026-11-12 :
 - Animations d'emote : le message réseau est testé, le rendu de l'animation n'a pas été observé.
 - Manette : code écrit (Gamepad API), aucune manette disponible pour l'essayer.
 - Prédiction locale sous latence réelle : testée seulement en local, sans latence.
+- Éditeur d'avatar : le rendu du profil et de l'éditeur a été vu sur captures fixes ; l'apparence dans le lobby d'un avatar enregistré est
+  couverte par le test serveur (état) mais n'a pas été observée à l'écran.
 
 ## Limitations connues
 
 - Kart Rush et Party Worlds marqués « bientôt » : leur salon existe, le lancement y est refusé.
 - Pas de musique (seulement des effets) : le réglage de volume musique viendra avec elle.
 - La console n'apparaît qu'au lancement ; pas d'animation de retour vers le lobby en fin de session.
-- Écran de résultats sans XP ni jetons (phases 6 et 7).
+- Écran de résultats : XP et succès (comptes), pas de jetons (phase 7).
+- Pas d'invitation d'un ami dans un salon (cahier des charges 7.3) ni d'historique de parties affiché : les données existent
+  (`session_participants`), l'interface non.
+- Classements : mondial et entre amis par XP seulement ; pas de classement par jeu (les statistiques par jeu sont sur le profil).
+- Cinq succès seulement, tous liés au volume de parties ou de manches gagnées.
+- Présence « en ligne » uniquement quand le site est ouvert (signal toutes les 30 s) ; mémoire d'un seul processus.
+- Blocage de joueurs toujours local à l'appareil, pas lié au compte.
+- Pas d'outil de modération pour les signalements ; pas de suppression de compte.
 - Blackjack : pas d'effets sonores propres au jeu ; la carte du croupier n'a pas d'animation de retournement.
 - Filtre de chat : liste de mots courte, à remplacer avant ouverture publique. Signalements seulement journalisés, sans outil de modération.
   Blocage stocké dans le navigateur, pas dans le compte.
-- Pas de collisions entre avatars ni avec le décor. Avatars sans éditeur : apparence dérivée de l'identité.
+- Pas de collisions entre avatars ni avec le décor. Avatar : 4 teints, 3 coiffures, 6 couleurs de cheveux, 2 styles d'yeux, 6 tenues ; pas de visage
+  morphologique ni de cosmétiques payants (phase 7). Un avatar modifié n'apparaît dans un salon déjà ouvert qu'à la prochaine connexion.
 - Une seule salle de lobby, commune à tous les jeux (les salles thématiques restent possibles : le décor est un composant isolé).
 - Pas de réglage de qualité graphique.
 - Deux canvas WebGL rendent en continu dans le lobby : à mesurer et optimiser en phase 10.
@@ -107,18 +139,19 @@ Vérifications exécutées le 2026-11-12 :
 
 ## En attente du porteur
 
-1. Démarrer Docker Desktop pour activer et vérifier les comptes en local (ou décider d'utiliser un projet Supabase hébergé).
-2. Identifiants OAuth Google et Discord.
+1. Tester l'inscription et la connexion réelles (ci-dessus), avec idéalement deux comptes pour les amis et la présence.
+2. Activer dans le tableau de bord Supabase la protection contre les mots de passe compromis (alerte restante du contrôle de sécurité).
+3. Identifiants OAuth Google et Discord, et URL de redirection `http://localhost:3000`.
+4. `GUEST_TOKEN_SECRET` à renseigner avant toute mise en production (vide en développement, le serveur refusera de démarrer en production).
 
-## Prochaines étapes (phase 6)
+## Prochaines étapes (phase 7)
 
-Préalable : Docker démarré, `npm run db:start`, fichiers `.env` remplis ; vérifier d'abord les migrations et la connexion par compte
-écrites en phases 1 et 4, jamais exécutées.
-
-1. Migrations : `avatar_configurations`, `friendships`, `friend_requests`, `user_privacy_settings`, `progression`, `achievements`, `user_achievements`.
-2. Éditeur d'avatar (visage, coiffure, yeux, couleurs, tenue) avec aperçu 3D ; `lookFromId` devient le repli des invités.
-3. Page de profil, recherche et demandes d'amis, présence avec réglages de confidentialité.
-4. XP et niveaux attribués côté serveur dans `record_match`, succès, classements mondial et entre amis.
+1. Migrations : `wallets`, `wallet_transactions`, `shop_items`, `user_inventory`, `missions`, `mission_progress`.
+2. Jetons : solde initial configurable, aide de reprise limitée côté serveur, récompenses de fin de session ajoutées à `record_match`
+   dans la même transaction (idempotence déjà assurée par l'identifiant de session).
+3. Missions quotidiennes et défis, progression calculée côté serveur.
+4. Boutique cosmétique : achat transactionnel sans solde négatif ni double achat, inventaire, équipement ; l'éditeur d'avatar proposera les objets possédés.
+5. Reporter ici, si souhaité : invitations de salon entre amis, historique de parties.
 
 ## Repères dans le code
 
@@ -149,8 +182,14 @@ Préalable : Docker démarré, `npm run db:start`, fichiers `.env` remplis ; vé
 | Enregistrement des résultats | `apps/game-server/src/persistence.ts`, `supabase/migrations/20261112000100_match_results.sql` |
 | Console et séquence de lancement | `apps/web/src/cartridge/CartridgeScene.tsx` (`Console`), `apps/web/src/components/LaunchSequence.tsx` |
 | Effets sonores et réglages | `apps/web/src/lib/audio.ts` |
+| Profil, amis, classements, confidentialité | `apps/web/src/components/profile/ProfileScreen.tsx`, `apps/web/src/lib/social.ts` |
+| Éditeur et aperçu d'avatar | `apps/web/src/components/profile/AvatarEditor.tsx`, `packages/shared/src/avatar.ts` |
+| Niveaux et XP | `packages/shared/src/progression.ts`, fonction SQL `record_match` |
+| Présence | `apps/game-server/src/presence.ts`, `packages/shared/src/presence.ts` |
+| Migrations de la phase 6 | `supabase/migrations/20261112000300_social_progression.sql`, `…000400_backfill_profiles.sql` |
 | Design system | `apps/web/src/app/globals.css`, `apps/web/src/components/ui.tsx` |
-| Test de parcours | `tests/e2e/lobby.spec.ts` |
+| Tests de parcours | `tests/e2e/lobby.spec.ts`, `blackjack.spec.ts`, `profile.spec.ts` (base simulée) |
+| Tests de comptes simulés | `apps/game-server/src/accounts.test.ts` |
 
 ## Notes techniques utiles
 
@@ -164,4 +203,11 @@ Préalable : Docker démarré, `npm run db:start`, fichiers `.env` remplis ; vé
 - Colyseus déconnecte un client dont un message échoue à la validation zod : l'interface doit toujours envoyer des charges valides.
 - Tests de jeu : `tuning` (`apps/game-server/src/games/blackjack.ts`) permet un paquet truqué et un temps accéléré.
 - En développement, `window.__lobbyRoom` expose la connexion du salon (utilisé par le test de parcours).
+- Vérifier du SQL sans rien laisser dans la base : un bloc `do $$ … $$` qui insère des faux comptes, appelle les fonctions, puis se termine par
+  `raise exception 'OK …'` est annulé en entier ; `set_config('request.jwt.claims', …, true)` simule `auth.uid()`.
+- Les fonctions créées dans `public` sont exécutables par tous par défaut : toujours `revoke … from public, anon` puis `grant` explicite.
+- `boot()` de `@colyseus/testing` ignore son paramètre de port quand on lui passe un serveur défini (toujours 2568) : pour un second fichier de test,
+  appeler `server.listen(port)` puis `new ColyseusTestServer(server)`.
+- Les parcours Playwright tournent en séquence (`workers: 1`) : en parallèle, la charge WebGL fait expirer les fenêtres de temps du jeu.
+- Tables à droits par colonne : `social.ts` met à jour puis insère si aucune ligne, plutôt qu'un upsert (qui réécrirait `user_id`, colonne non modifiable). Raisonnement non vérifié avec un vrai client.
 - Le volet navigateur de l'application Claude ne compose pas d'images quand il est masqué : passer par les captures Playwright.

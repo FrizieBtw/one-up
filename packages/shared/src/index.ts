@@ -4,3 +4,6 @@ export * from "./roomCode";
 export * from "./protocol";
 export * from "./movement";
 export * from "./moderation";
+export * from "./avatar";
+export * from "./progression";
+export * from "./presence";

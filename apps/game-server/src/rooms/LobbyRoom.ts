@@ -33,7 +33,8 @@ import {
 } from "@stepup/shared";
 import { verifyToken } from "../auth";
 import { BlackjackGame, BlackjackState, tuning } from "../games/blackjack";
-import { recordMatch } from "../persistence";
+import { fetchAvatar, recordMatch } from "../persistence";
+import { presence } from "../presence";
 import { createRateLimiter } from "../rateLimit";
 
 export const Player = schema(
@@ -43,6 +44,7 @@ export const Player = schema(
     kind: t.string(),
     ready: t.boolean(),
     connected: t.boolean(),
+    avatar: t.string().default(""),
     x: t.float32(),
     z: t.float32(),
     dx: t.float32(),
@@ -253,15 +255,16 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     });
   }
 
-  async onAuth(_client: Client, _options: unknown, context: AuthContext): Promise<Identity> {
+  async onAuth(_client: Client, _options: unknown, context: AuthContext): Promise<Identity & { avatar: string }> {
     const identity = await verifyToken(context.token);
     if (!identity) throw new ServerError(401, JoinError.Unauthorized);
     // Pas de spectateurs : on n'entre plus une fois le lancement engagé.
     if (this.state.phase !== "waiting") throw new ServerError(403, JoinError.InProgress);
-    return identity;
+    // Seuls les comptes ont un avatar enregistré ; les invités reçoivent un avatar par défaut côté client.
+    return { ...identity, avatar: identity.kind === "user" ? await fetchAvatar(identity.id) : "" };
   }
 
-  onJoin(client: Client, _options: unknown, identity: Identity) {
+  onJoin(client: Client, _options: unknown, identity: Identity & { avatar: string }) {
     // Une identité = un seul siège. Un siège déconnecté est remplacé, un siège actif bloque le doublon.
     for (const [sessionId, existing] of this.state.players) {
       if (existing.id !== identity.id) continue;
@@ -279,6 +282,7 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
         kind: identity.kind,
         ready: false,
         connected: true,
+        avatar: identity.avatar,
         x: Math.cos(angle) * LOBBY_SPAWN_RADIUS,
         z: Math.sin(angle) * LOBBY_SPAWN_RADIUS,
         dx: 0,
@@ -286,6 +290,7 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       }),
     );
     this.ensureHost();
+    if (identity.kind === "user") presence.setRoom(identity.id, "lobby", this.state.gameId);
   }
 
   onDrop(client: Client) {
@@ -310,6 +315,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
 
   onLeave(client: Client) {
     this.seats.delete(client.sessionId);
+    const leaving = this.state.players.get(client.sessionId);
+    if (leaving?.kind === "user") presence.clearRoom(leaving.id);
     this.state.players.delete(client.sessionId);
     this.blackjack?.removePlayer(client.sessionId);
     this.ensureHost();
@@ -347,6 +354,7 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     this.state.proposals.clear();
     this.votes.clear();
     this.state.phase = "playing";
+    this.setPresence("playing");
     void this.syncMetadata();
     const matchId = randomUUID(); // clé d'idempotence de l'enregistrement des résultats
     // Seul jeu disponible pour l'instant ; les suivants brancheront ici leur propre contrôleur.
@@ -355,6 +363,7 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       onFinished: () => {
         this.blackjack = null;
         this.state.phase = "results";
+        this.setPresence("lobby");
         void this.syncMetadata();
         void this.saveBlackjackResults(matchId);
       },
@@ -372,8 +381,14 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     }
   }
 
-  /** Classement calculé ici, côté serveur : le client n'envoie jamais de score. */
-  private saveBlackjackResults(matchId: string) {
+  private setPresence(status: "lobby" | "playing") {
+    for (const player of this.state.players.values()) {
+      if (player.kind === "user" && player.connected) presence.setRoom(player.id, status, this.state.gameId);
+    }
+  }
+
+  /** Classement calculé ici, côté serveur : le client n'envoie jamais de score. Envoie ensuite à chacun ses récompenses. */
+  private async saveBlackjackResults(matchId: string) {
     const table = [...this.state.blackjack.players];
     const participants = table.flatMap(([sessionId, result]) => {
       const player = this.state.players.get(sessionId);
@@ -381,7 +396,12 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       const rank = 1 + table.filter(([, other]) => other.score > result.score).length;
       return [{ user_id: player.id, rank, score: result.score, wins: result.wins, pushes: result.pushes, losses: result.losses }];
     });
-    return recordMatch(matchId, this.state.gameId, this.state.blackjack.round, participants);
+    const rewards = await recordMatch(matchId, this.state.gameId, this.state.blackjack.round, participants);
+    for (const reward of rewards) {
+      const sessionId = [...this.state.players].find(([, player]) => player.id === reward.userId)?.[0];
+      const client = sessionId ? this.clients.getById(sessionId) : undefined;
+      client?.send("rewards", { xpGained: reward.xpGained, xp: reward.xp, achievements: reward.achievements } satisfies ServerMessages["rewards"]);
+    }
   }
 
   private isValidChange(key: string, value: unknown): boolean {
