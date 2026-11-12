@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@colyseus/schema": "^5.0.48",
+    "@colyseus/timer": "*",
+    "@stepup/blackjack": "*",
     "@stepup/shared": "*",
     "@supabase/supabase-js": "^2.119.0",
     "colyseus": "^0.18.12",

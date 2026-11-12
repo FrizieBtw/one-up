@@ -11,6 +11,7 @@
   "dependencies": {
     "@colyseus/sdk": "^0.18.10",
     "@react-three/fiber": "^9.8.2",
+    "@stepup/blackjack": "*",
     "@stepup/shared": "*",
     "@supabase/supabase-js": "^2.119.0",
     "next": "^16.4.6",

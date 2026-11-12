@@ -8,6 +8,7 @@ import {
   CHAT_MAX_LENGTH,
   EMOTES,
   getGame,
+  launchBlocker,
   parseSettings,
   type ClientMessage,
   type ClientMessageType,
@@ -17,6 +18,7 @@ import {
   type SettingDef,
   type SettingValue,
 } from "@stepup/shared";
+import { BlackjackScreen } from "@/blackjack/BlackjackScreen";
 import { MINI_ANCHOR, anchor } from "@/cartridge/anchors";
 import { useBlocked } from "@/lib/blocked";
 import { useInputDevice } from "@/lib/input";
@@ -87,6 +89,8 @@ function useLobbyRoom(code: string) {
               return announce(`Règle modifiée : ${label(m.key)}.`);
             case "proposalCreated":
               return announce(`${m.name} propose de changer : ${label(m.key)}.`);
+            case "launchCancelled":
+              return announce("Lancement annulé.");
             case "proposalResolved":
               return announce(`Proposition ${m.accepted ? "validée" : "rejetée"} : ${label(m.key)}.`);
           }
@@ -178,7 +182,7 @@ export function LobbyScreen({ code }: { code: string }) {
     );
   }
 
-  const send = <T extends ClientMessageType>(type: T, message: ClientMessage<T>) => room.send(type, message);
+  const send = <T extends ClientMessageType>(type: T, message: ClientMessage<T>) => void room.send(type, message);
   const me = state.players[room.sessionId];
   const isHost = state.hostSessionId === room.sessionId;
   const players = Object.entries(state.players);
@@ -206,19 +210,62 @@ export function LobbyScreen({ code }: { code: string }) {
     push({ text: `Signalement de ${name} envoyé.` });
   };
 
+  const chatCard = (
+    <Card className="!p-4">
+      <h3 className="text-xl">Chat</h3>
+      <ul ref={feedList} aria-live="polite" className="mt-2 flex h-40 flex-col gap-1 overflow-y-auto rounded-2xl border-3 border-ink bg-cream p-3 text-sm">
+        {feed
+          .filter((line) => !line.fromId || !blocked.includes(line.fromId))
+          .map((line) =>
+            line.name ? (
+              <li key={line.key}>
+                <strong>{line.name} :</strong> {line.text}
+              </li>
+            ) : (
+              <li key={line.key} className="font-bold text-violet-deep">
+                {line.text}
+              </li>
+            ),
+          )}
+      </ul>
+      <form onSubmit={chat} className="mt-2 flex gap-2">
+        <Input name="text" aria-label="Message" maxLength={CHAT_MAX_LENGTH} placeholder="Votre message…" autoComplete="off" />
+        <Button type="submit" className="!px-4">
+          Envoyer
+        </Button>
+      </form>
+    </Card>
+  );
+
+  // La cartouche du jeu reste en haut à droite : dans le lobby, elle ouvre les règles affichées sur son dos.
+  const miniCartridge = (
+    <button
+      ref={anchor(MINI_ANCHOR)}
+      type="button"
+      aria-label="Règles de la partie : ouvrir la cartouche"
+      aria-expanded={settingsOpen}
+      disabled={state.phase !== "waiting"}
+      className="fixed right-5 top-4 z-10 aspect-[1/1.25] h-28 cursor-pointer rounded-xl disabled:cursor-default"
+      onClick={() => setSettingsOpen(true)}
+    />
+  );
+
+  if (state.phase === "playing" || state.phase === "results") {
+    return (
+      <>
+        {miniCartridge}
+        <BlackjackScreen state={state} sessionId={room.sessionId} isHost={isHost} send={send} chat={chatCard} onQuit={goHome} />
+      </>
+    );
+  }
+
+  const blocker = launchBlocker(game, Object.values(state.players));
+
   return (
     <>
       <LobbyRoom3D room={room} players={players.map(([sessionId, p]) => ({ sessionId, connected: p.connected }))} />
 
-      {/* La cartouche du jeu reste en haut à droite : elle ouvre les règles, affichées sur son dos. */}
-      <button
-        ref={anchor(MINI_ANCHOR)}
-        type="button"
-        aria-label="Règles de la partie : ouvrir la cartouche"
-        aria-expanded={settingsOpen}
-        className="fixed right-5 top-4 z-10 aspect-[1/1.25] h-28 cursor-pointer rounded-xl"
-        onClick={() => setSettingsOpen(true)}
-      />
+      {miniCartridge}
 
       <aside className="rise-in fixed left-4 top-24 z-10 flex max-h-[calc(100dvh-7rem)] w-72 flex-col gap-4 overflow-y-auto pb-2 pr-1">
         <Card className="!p-4">
@@ -269,7 +316,16 @@ export function LobbyScreen({ code }: { code: string }) {
           <Button className="mt-3" variant={me?.ready ? "plain" : "calm"} onClick={() => send("ready", { ready: !me?.ready })}>
             {me?.ready ? "Annuler prêt" : "Je suis prêt"}
           </Button>
-          <p className="mt-2 text-xs font-bold text-ink/70">Le lancement de partie arrive avec le premier jeu (phase 4).</p>
+          {isHost ? (
+            <>
+              <Button className="mt-2" variant="accent" disabled={blocker !== null} onClick={() => send("start", {})}>
+                Lancer la partie
+              </Button>
+              {blocker && <p className="mt-1 text-xs font-bold text-ink/70">{blocker}</p>}
+            </>
+          ) : (
+            <p className="mt-2 text-xs font-bold text-ink/70">L'hôte lance la partie quand plus de la moitié des joueurs sont prêts.</p>
+          )}
         </Card>
       </aside>
 
@@ -307,30 +363,7 @@ export function LobbyScreen({ code }: { code: string }) {
           </Card>
         )}
 
-        <Card className="!p-4">
-          <h3 className="text-xl">Chat</h3>
-          <ul ref={feedList} aria-live="polite" className="mt-2 flex h-40 flex-col gap-1 overflow-y-auto rounded-2xl border-3 border-ink bg-cream p-3 text-sm">
-            {feed
-              .filter((line) => !line.fromId || !blocked.includes(line.fromId))
-              .map((line) =>
-                line.name ? (
-                  <li key={line.key}>
-                    <strong>{line.name} :</strong> {line.text}
-                  </li>
-                ) : (
-                  <li key={line.key} className="font-bold text-violet-deep">
-                    {line.text}
-                  </li>
-                ),
-              )}
-          </ul>
-          <form onSubmit={chat} className="mt-2 flex gap-2">
-            <Input name="text" aria-label="Message" maxLength={CHAT_MAX_LENGTH} placeholder="Votre message…" autoComplete="off" />
-            <Button type="submit" className="!px-4">
-              Envoyer
-            </Button>
-          </form>
-        </Card>
+        {chatCard}
       </aside>
 
       <div className="rise-in fixed bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -347,6 +380,18 @@ export function LobbyScreen({ code }: { code: string }) {
             : "Déplacement : ZQSD ou flèches · Emotes : touches 1 à 4"}
         </p>
       </div>
+
+      {state.phase === "countdown" && (
+        <div role="status" className="fixed left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 rounded-chunk border-3 border-ink bg-sun px-10 py-6 shadow-chunk">
+          <p className="font-display text-2xl font-bold">La partie démarre dans</p>
+          <p className="font-display text-7xl font-extrabold text-violet">{state.countdown}</p>
+          {isHost && (
+            <Button variant="plain" onClick={() => send("cancelStart", {})}>
+              Annuler le lancement
+            </Button>
+          )}
+        </div>
+      )}
 
       {!online && (
         <p role="status" className="fixed left-1/2 top-4 z-40 -translate-x-1/2 rounded-xl border-3 border-ink bg-coral px-4 py-2 font-bold">

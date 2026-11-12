@@ -1,7 +1,9 @@
 import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LOBBY_RADIUS, LOBBY_ROOM_NAME, LOBBY_SPAWN_RADIUS, LOBBY_SPEED, normalizeRoomCode, type LobbySnapshot, type PublicRoomInfo } from "@stepup/shared";
+import { createDeck, type Card as RuleCard } from "@stepup/blackjack";
 import { server } from "./app";
+import { tuning } from "./games/blackjack";
 import { issueGuestToken, verifyGuestToken, verifyToken } from "./auth";
 import { createRateLimiter } from "./rateLimit";
 
@@ -258,6 +260,125 @@ describe("lobby room", () => {
     expect(bob.errors.at(-1).code).toBe("FORBIDDEN"); // aucune nouvelle erreur
     await alice.room.leave();
     await bob.room.leave();
+  });
+
+  it("launches with a ready majority, plays blackjack rounds to the end, and returns to the lobby", async () => {
+    const card = (rank: string, suit = "spades") => ({ rank, suit }) as RuleCard;
+    // Ordre de distribution : deux cartes par joueur dans l'ordre de la table, carte visible puis cachée du croupier, puis les tirages.
+    const decks = [
+      [card("10"), card("6"), card("A"), card("K"), card("9"), card("8"), card("5")], // Alice 16 puis 21, Bob naturel, croupier 17
+      [card("K"), card("5"), card("9"), card("7"), card("10"), card("9"), card("K")], // Alice dépasse, Bob 16 laissé au chrono, croupier 19
+    ];
+    const saved = { ...tuning };
+    Object.assign(tuning, { tickMs: 30, dealerStepMs: 10, deck: () => decks.shift() ?? createDeck() });
+    const until = async (condition: () => boolean, label: string) => {
+      for (let i = 0; i < 150; i++) {
+        if (condition()) return;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      throw new Error(`condition non atteinte : ${label}`);
+    };
+
+    try {
+      const alice = await create("Alice", { gameId: "blackjack", isPublic: true });
+      const code = alice.room.roomId;
+      const bob = await joinByCode("Bob", code);
+      await settle();
+      const state = () => bob.snapshot();
+      const bj = () => state().blackjack;
+
+      // Conditions de lancement : hôte seul, majorité stricte de prêts.
+      bob.room.send("start", {});
+      alice.room.send("start", {});
+      alice.room.send("ready", { ready: true });
+      await settle();
+      alice.room.send("start", {}); // 1 prêt sur 2 : pas la majorité
+      await settle();
+      expect(bob.errors.map((e) => e.code)).toEqual(["FORBIDDEN"]);
+      expect(alice.errors.map((e) => e.message)).toEqual(Array(2).fill("Plus de la moitié des joueurs doivent être prêts."));
+      expect(state().phase).toBe("waiting");
+
+      // Annulation par l'hôte, puis annulation automatique quand la majorité disparaît.
+      bob.room.send("ready", { ready: true });
+      await settle();
+      alice.room.send("start", {});
+      await until(() => state().phase === "countdown", "compte à rebours");
+      expect(state().countdown).toBeGreaterThan(0);
+      alice.room.send("cancelStart", {});
+      await until(() => state().phase === "waiting", "annulation hôte");
+      alice.room.send("start", {});
+      await until(() => state().phase === "countdown", "second compte à rebours");
+      bob.room.send("ready", { ready: false });
+      alice.room.send("ready", { ready: false });
+      await until(() => state().phase === "waiting", "annulation automatique");
+      expect(bob.notices.filter((n) => n.type === "launchCancelled")).toHaveLength(2);
+
+      // Lancement réel.
+      bob.room.send("ready", { ready: true });
+      alice.room.send("ready", { ready: true });
+      await settle();
+      alice.room.send("start", {});
+      await until(() => state().phase === "playing", "partie lancée");
+
+      // Pas de spectateur ni d'entrée en cours de partie ; règles verrouillées.
+      colyseus.sdk.auth.token = issueGuestToken("Carol").token;
+      await expect(colyseus.sdk.joinById(code)).rejects.toThrow("IN_PROGRESS");
+      expect(((await (await http("/rooms?game=blackjack")).json()) as PublicRoomInfo[])[0]!.phase).toBe("playing");
+      alice.room.send("setSetting", { key: "decisionSeconds", value: 60 });
+
+      // Manche 1 : Bob a un naturel et ne joue pas ; la carte cachée du croupier n'est pas dans l'état.
+      expect(bj()).toMatchObject({ round: 1, stage: "playing", turn: alice.room.sessionId, dealerHidden: true });
+      expect(bj().dealer).toEqual([{ rank: "9", suit: "spades" }]);
+      expect(bj().players[bob.room.sessionId]!.status).toBe("blackjack");
+      bob.room.send("bjAction", { action: "hit" }); // pas son tour
+      alice.room.send("bjAction", { action: "hit" }); // 16 + 5 = 21 : reste automatiquement
+      await until(() => bj().stage === "roundEnd", "fin de manche 1");
+      expect(bob.errors.at(-1).message).toBe("Ce n'est pas votre tour.");
+      expect(alice.errors.at(-1).code).toBe("INVALID"); // réglage refusé pendant la partie
+      expect(bj().dealer.map((c) => c.rank)).toEqual(["9", "8"]); // 17 : le croupier reste
+      expect(bj().players[alice.room.sessionId]).toMatchObject({ status: "stood", result: "win", score: 3, wins: 1 });
+      expect(bj().players[bob.room.sessionId]).toMatchObject({ result: "win", score: 3, wins: 1 });
+
+      // Manche 2 : seul l'hôte enchaîne. Alice dépasse ; Bob ne joue pas, le chrono le fait rester.
+      bob.room.send("bjNext", {});
+      await settle();
+      expect(bj().round).toBe(1);
+      alice.room.send("bjNext", {});
+      await until(() => bj().round === 2 && bj().turn === alice.room.sessionId, "manche 2");
+      alice.room.send("bjAction", { action: "hit" });
+      await until(() => bj().turn === bob.room.sessionId, "tour de Bob");
+      expect(bj().players[alice.room.sessionId]!.status).toBe("bust");
+      await until(() => bj().stage === "roundEnd", "fin de manche 2 par chrono");
+      expect(bj().players[bob.room.sessionId]).toMatchObject({ status: "stood", result: "loss", score: 3, losses: 1 });
+      expect(bj().players[alice.room.sessionId]).toMatchObject({ result: "loss", score: 3, wins: 1, losses: 1 });
+      expect(bj().dealer.map((c) => c.rank)).toEqual(["10", "9"]);
+
+      // Sans décision de l'hôte, la manche suivante démarre seule.
+      await until(() => bj().round === 3, "manche 3 automatique");
+
+      // L'hôte quitte pendant son tour : le tour et le rôle passent à Bob, la table continue.
+      expect(bj().turn).toBe(alice.room.sessionId);
+      await alice.room.leave();
+      await until(() => bj().turn === bob.room.sessionId, "tour transmis");
+      expect(Object.keys(bj().players)).toEqual([bob.room.sessionId]);
+      expect(state().hostSessionId).toBe(bob.room.sessionId);
+      bob.room.send("bjEnd", {}); // refusé en cours de manche
+      bob.room.send("bjAction", { action: "stand" });
+      await until(() => bj().stage === "roundEnd", "fin de manche 3");
+      expect(state().phase).toBe("playing");
+
+      // Fin de session par l'hôte, puis retour au lobby : statuts « prêt » remis à zéro.
+      bob.room.send("bjEnd", {});
+      await until(() => state().phase === "results", "résultats");
+      expect(bj().stage).toBe("finished");
+      expect(bj().players[bob.room.sessionId]!.wins + bj().players[bob.room.sessionId]!.pushes + bj().players[bob.room.sessionId]!.losses).toBe(3);
+      bob.room.send("backToLobby", {});
+      await until(() => state().phase === "waiting", "retour au lobby");
+      expect(state().players[bob.room.sessionId]!.ready).toBe(false);
+      await bob.room.leave();
+    } finally {
+      Object.assign(tuning, saved);
+    }
   });
 
   it("issues guest tokens over HTTP and validates names", async () => {

@@ -7,8 +7,9 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
 
 - **Phase 1 — Fondations** : terminée côté invité ; comptes Supabase écrits mais non vérifiés.
 - **Phase 2 — Accueil et cartouches** : terminée. Sons de cartouche non faits.
-- **Phase 3 — Lobbies sociaux** : terminée (branche `phase-3-lobby`), sauf le lancement de partie, reporté à la phase 4 faute de jeu à lancer.
-- Prochaine : **phase 4** (Blackjack Battle de bout en bout, avec lancement et compte à rebours).
+- **Phase 3 — Lobbies sociaux** : terminée.
+- **Phase 4 — Blackjack Battle** : terminée pour les invités (branche `phase-4-blackjack`) ; sauvegarde des statistiques écrite mais non vérifiée.
+- Prochaine : **phase 5** (console fictive et animation d'insertion synchronisée au chargement).
 
 ## Ce qui fonctionne réellement (vérifié)
 
@@ -29,40 +30,53 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
 - Emotes (salut, danse, bravo, rire) par boutons ou touches 1 à 4, diffusées à tous, limitées en débit.
 - Propositions de règles par tout joueur, votes pour ou contre, décision de l'hôte (valider ou rejeter) ; le vote n'applique rien.
   Anti-spam : une proposition par joueur toutes les 10 s, cinq ouvertes au plus.
+- Lancement de partie : réservé à l'hôte, minimum de joueurs et majorité stricte de prêts, compte à rebours de 5 s annulable,
+  annulé d'office si la majorité disparaît. Plus d'entrée dans le salon et règles verrouillées dès le compte à rebours.
+- Blackjack Battle jouable de bout en bout : distribution, tirer ou rester, as, naturel, croupier, tours séquentiels avec temps de décision,
+  repli automatique au chrono, score 3/1/0, manches illimitées, manche suivante automatique après 15 s, fin de session par l'hôte,
+  écran de résultats, retour au lobby. Table 3D avec croupier, cartes animées, avatars, classement en direct, chat en jeu.
+  Commandes clavier (T, R) et manette.
 - Modération de premier niveau : filtre de mots côté serveur, blocage local d'un joueur (messages masqués), signalement journalisé.
 
 Vérifications exécutées le 2026-11-12 :
 
-- `npm test` : 19 tests réussis (dont déplacement serveur borné en vitesse et en espace, emotes, propositions, votes, filtre,
-  exclusion d'un client hors schéma).
-- `npm run test:e2e` : parcours Playwright réussi (Chromium) avec 4 joueurs : dos de cartouche, Échap, création privée, code inconnu refusé,
+- `npm test` : 25 tests réussis. Blackjack : règles pures (as, naturel, croupier, résolution) et une partie complète côté serveur
+  avec paquet truqué (conditions de lancement, annulations, entrée refusée en cours de partie, carte cachée absente de l'état,
+  action hors tour refusée, chrono, manche automatique, départ de l'hôte pendant son tour, résultats, retour au lobby).
+- `npm run test:e2e` : deux parcours Playwright réussis (Chromium). Blackjack à deux joueurs : recherche publique avec un salon listé,
+  lancement bloqué puis permis, annulation, deux manches, chat en jeu, résultats, retour au lobby. Lobby avec 4 joueurs : dos de cartouche, Échap, création privée, code inconnu refusé,
   jointure par code, salon privé absent de la recherche, règles au dos de la mini cartouche, annonce reçue, proposition, votes et validation,
   déplacement au clavier vu par l'autre joueur, chat filtré, blocage et déblocage, signalement, lien de partage, rechargement sans doublon,
   départ de l'hôte et transfert du rôle.
 - `npm run typecheck` et `npm run build` : sans erreur.
-- Rendu contrôlé sur captures d'écran Playwright (grille, dos de cartouche, règles, propositions, salle 3D avec avatars).
+- Rendu contrôlé sur captures d'écran Playwright (grille, dos de cartouche, règles, propositions, salle 3D, table de blackjack,
+  fin de manche, résultats).
 
 ## Écrit mais non vérifié
 
 - **Comptes Supabase** (e-mail, Google, Discord) : formulaire web, vérification du jeton côté serveur et migration `profiles`.
   Docker était arrêté : ni la migration SQL ni la connexion par compte n'ont été exécutées.
   Pour vérifier : démarrer Docker Desktop, `npm run db:start`, remplir les fichiers `.env` (voir README), tester inscription et connexion.
+- **Sauvegarde des statistiques** : migration `match_results` et appel `record_match` écrits, jamais exécutés (Docker arrêté).
+  Elle ne concerne que les comptes ; avec des invités, rien n'est enregistré.
+- Commandes de jeu au clavier (T, R) : branchées, mais le parcours automatisé clique sur les boutons.
+- Blackjack à plus de 2 joueurs dans le navigateur : la logique serveur est générique, l'affichage à 6 n'a pas été vu.
 - Transfert d'hôte après 10 s de déconnexion : seul le départ volontaire est testé.
 - Fluidité des animations (cartouches, marche, emotes) : seules des images fixes ont été contrôlées, pas le mouvement ni la fréquence d'images.
 - Animations d'emote : le message réseau est testé, le rendu de l'animation n'a pas été observé.
 - Manette : code écrit (Gamepad API), aucune manette disponible pour l'essayer.
 - Prédiction locale sous latence réelle : testée seulement en local, sans latence.
-- Recherche publique avec des salons listés : le serveur est testé, l'interface n'a été vue qu'avec une liste vide.
 
 ## Limitations connues
 
-- Les trois jeux sont marqués « bientôt » : seul le salon existe. Pas de lancement de partie (phase 4).
-- Pas de lancement de partie ni de compte à rebours (phase 4).
+- Kart Rush et Party Worlds marqués « bientôt » : leur salon existe, le lancement y est refusé.
+- Pas de console ni d'animation d'insertion : le passage lobby → partie est direct (phase 5).
+- Écran de résultats sans XP ni jetons (phases 6 et 7).
+- Blackjack : pas d'effets sonores ; la carte du croupier n'a pas d'animation de retournement.
 - Filtre de chat : liste de mots courte, à remplacer avant ouverture publique. Signalements seulement journalisés, sans outil de modération.
   Blocage stocké dans le navigateur, pas dans le compte.
 - Pas de collisions entre avatars ni avec le décor. Avatars sans éditeur : apparence dérivée de l'identité.
 - Une seule salle de lobby, commune à tous les jeux (les salles thématiques restent possibles : le décor est un composant isolé).
-- Pas de chat en jeu (aucun jeu encore).
 - Aucun son, pas de réglage de qualité graphique.
 - Deux canvas WebGL rendent en continu dans le lobby : à mesurer et optimiser en phase 10.
 - Limiteurs de débit en mémoire, un seul processus serveur.
@@ -75,7 +89,10 @@ Vérifications exécutées le 2026-11-12 :
 - Jeton invité valable 24 h ; progression des invités non conservée.
 - Revenir à l'accueil (bouton Quitter ou retour du navigateur) quitte le salon.
 - Un joueur déconnecté reste visible, estompé, pendant sa fenêtre de reconnexion.
-- Le lancement de partie (5.5) est traité en phase 4, avec le premier jeu.
+- Au terme du compte à rebours, tous les joueurs connectés participent, prêts ou non : le compte à rebours visible leur laisse
+  le temps de réagir ou de quitter. Les joueurs déconnectés à cet instant sont retirés du salon.
+- Blackjack : croupier qui reste sur 17 souple, pas de doublement ni de séparation, paquet remélangé à chaque manche.
+- Blackjack : sans décision de l'hôte, la manche suivante démarre après 15 s.
 - Rejoindre par code depuis la cartouche d'un autre jeu est accepté : la cartouche affichée devient celle du jeu du salon.
 - Motion n'est pas installé : les transitions DOM actuelles tiennent en CSS. À ajouter quand une transition le demandera.
 - Drei n'est pas installé : aucun de ses composants n'est utilisé pour l'instant.
@@ -85,13 +102,13 @@ Vérifications exécutées le 2026-11-12 :
 1. Démarrer Docker Desktop pour activer et vérifier les comptes en local (ou décider d'utiliser un projet Supabase hébergé).
 2. Identifiants OAuth Google et Discord.
 
-## Prochaines étapes (phase 4)
+## Prochaines étapes (phase 5)
 
-1. Lancement : minimum de joueurs, majorité de prêts, compte à rebours de 5 s, gestion des non prêts, annulation propre.
-2. `packages/games/blackjack` : règles pures et testées (distribution, as, croupier, résolution, score 3/1/0).
-3. Salon de jeu autoritaire : tours séquentiels, temps de décision, repli sur déconnexion, arrêt par l'hôte entre deux manches.
-4. Table 3D, cartes animées, avatars, tableau de score, écran de résultats.
-5. Migrations `game_sessions`, `session_participants`, `match_results`, `player_stats` (exige Supabase démarré).
+1. Console fictive originale (modèle 3D procédural) dans la scène des cartouches.
+2. Au lancement : la cartouche quitte le coin, la console apparaît, insertion animée.
+3. Synchronisation avec l'état serveur : l'animation se termine quand la phase `playing` est effective et la scène de jeu chargée.
+4. Bouton « Passer l'animation », sans entrer avant que tout soit prêt ; annulation propre si le serveur annule.
+5. Premiers effets sonores (insertion, sélection) avec réglages musique, effets et muet.
 
 ## Repères dans le code
 
@@ -116,6 +133,10 @@ Vérifications exécutées le 2026-11-12 :
 | Entrées clavier et manette | `apps/web/src/lib/input.ts` |
 | Mouvement partagé client/serveur | `packages/shared/src/movement.ts` |
 | Filtre de chat | `packages/shared/src/moderation.ts` |
+| Règles du blackjack | `packages/games/blackjack/src/index.ts` |
+| Partie de blackjack (serveur) | `apps/game-server/src/games/blackjack.ts` |
+| Écran et table de blackjack | `apps/web/src/blackjack/` |
+| Enregistrement des résultats | `apps/game-server/src/persistence.ts`, `supabase/migrations/20261112000100_match_results.sql` |
 | Design system | `apps/web/src/app/globals.css`, `apps/web/src/components/ui.tsx` |
 | Test de parcours | `tests/e2e/lobby.spec.ts` |
 
@@ -129,5 +150,6 @@ Vérifications exécutées le 2026-11-12 :
   Le DOM porte clics, clavier et défilement ; le panneau du dos est du DOM calé sur la plaque claire du modèle.
 - `<Outlines>` de drei casse sur la géométrie extrudée de la cartouche (polygones géants) : ne pas le réutiliser tel quel.
 - Colyseus déconnecte un client dont un message échoue à la validation zod : l'interface doit toujours envoyer des charges valides.
+- Tests de jeu : `tuning` (`apps/game-server/src/games/blackjack.ts`) permet un paquet truqué et un temps accéléré.
 - En développement, `window.__lobbyRoom` expose la connexion du salon (utilisé par le test de parcours).
 - Le volet navigateur de l'application Claude ne compose pas d'images quand il est masqué : passer par les captures Playwright.

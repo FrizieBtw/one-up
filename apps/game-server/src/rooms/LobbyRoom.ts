@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { type AuthContext, type Client, type Deferred, Room, ServerError, matchMaker } from "colyseus";
 import { schema, t, type SchemaType } from "@colyseus/schema";
+import type { Delayed } from "@colyseus/timer";
 import {
   CAPACITY_KEY,
   CHAT_RATE,
   EMOTE_RATE,
   HOST_GRACE_SECONDS,
   JoinError,
+  LAUNCH_COUNTDOWN_SECONDS,
   LOBBY_SPAWN_RADIUS,
   LOBBY_TICK_MS,
   MAX_OPEN_PROPOSALS,
@@ -21,6 +24,7 @@ import {
   getGame,
   isValidCapacity,
   isValidSetting,
+  launchBlocker,
   parseSettings,
   stepLobbyPosition,
   type GameDefinition,
@@ -28,6 +32,8 @@ import {
   type ServerMessages,
 } from "@stepup/shared";
 import { verifyToken } from "../auth";
+import { BlackjackGame, BlackjackState, tuning } from "../games/blackjack";
+import { recordMatch } from "../persistence";
 import { createRateLimiter } from "../rateLimit";
 
 export const Player = schema(
@@ -70,6 +76,8 @@ export const LobbyState = schema(
     settings: t.string().default("{}"),
     players: t.map(Player),
     proposals: t.map(Proposal),
+    countdown: t.uint8().default(0),
+    blackjack: t.ref(BlackjackState),
   },
   "LobbyState",
 );
@@ -99,6 +107,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
   /** Votes par proposition : identité du votant → pour (true) ou contre (false). */
   private votes = new Map<string, Map<string, boolean>>();
   private nextProposalId = 1;
+  private launchTimer: Delayed | null = null;
+  private blackjack: BlackjackGame | null = null;
   private chatAllowed = createRateLimiter(CHAT_RATE.max, CHAT_RATE.windowMs);
   private emoteAllowed = createRateLimiter(EMOTE_RATE.max, EMOTE_RATE.windowMs);
   private proposalAllowed = createRateLimiter(PROPOSAL_RATE.max, PROPOSAL_RATE.windowMs);
@@ -198,6 +208,41 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       this.announce("notice", { type: "proposalResolved", key: proposal.key, accepted: applied });
     });
 
+    // Lancement : l'hôte démarre un compte à rebours, annulé si les conditions ne tiennent plus.
+    this.onMessage("start", clientMessages.start, (client) => {
+      if (!this.requireHost(client) || this.state.phase !== "waiting") return;
+      const blocker = launchBlocker(this.game, [...this.state.players.values()]);
+      if (blocker) return this.refuse(client, "INVALID", blocker);
+      this.state.phase = "countdown";
+      this.state.countdown = LAUNCH_COUNTDOWN_SECONDS;
+      void this.syncMetadata();
+      this.launchTimer = this.clock.setInterval(() => {
+        if (launchBlocker(this.game, [...this.state.players.values()])) return this.cancelLaunch();
+        if (--this.state.countdown === 0) this.beginGame();
+      }, tuning.tickMs);
+    });
+
+    this.onMessage("cancelStart", clientMessages.cancelStart, (client) => {
+      if (this.requireHost(client) && this.state.phase === "countdown") this.cancelLaunch();
+    });
+
+    this.onMessage("backToLobby", clientMessages.backToLobby, (client) => {
+      if (!this.requireHost(client) || this.state.phase !== "results") return;
+      for (const player of this.state.players.values()) player.ready = false;
+      this.state.phase = "waiting";
+      void this.syncMetadata();
+    });
+
+    this.onMessage("bjAction", clientMessages.bjAction, (client, { action }) => {
+      if (!this.blackjack?.action(client.sessionId, action)) this.refuse(client, "INVALID", "Ce n'est pas votre tour.");
+    });
+    this.onMessage("bjNext", clientMessages.bjNext, (client) => {
+      if (this.requireHost(client)) this.blackjack?.next();
+    });
+    this.onMessage("bjEnd", clientMessages.bjEnd, (client) => {
+      if (this.requireHost(client)) this.blackjack?.end();
+    });
+
     this.onMessage("report", clientMessages.report, (client, { sessionId, reason }) => {
       const reporter = this.state.players.get(client.sessionId);
       const target = this.state.players.get(sessionId);
@@ -211,6 +256,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
   async onAuth(_client: Client, _options: unknown, context: AuthContext): Promise<Identity> {
     const identity = await verifyToken(context.token);
     if (!identity) throw new ServerError(401, JoinError.Unauthorized);
+    // Pas de spectateurs : on n'entre plus une fois le lancement engagé.
+    if (this.state.phase !== "waiting") throw new ServerError(403, JoinError.InProgress);
     return identity;
   }
 
@@ -264,7 +311,55 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
   onLeave(client: Client) {
     this.seats.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
+    this.blackjack?.removePlayer(client.sessionId);
     this.ensureHost();
+  }
+
+  onDispose() {
+    this.blackjack?.dispose();
+  }
+
+  private cancelLaunch() {
+    this.launchTimer?.clear();
+    this.launchTimer = null;
+    this.state.phase = "waiting";
+    this.state.countdown = 0;
+    void this.syncMetadata();
+    this.announce("notice", { type: "launchCancelled" });
+  }
+
+  /**
+   * Fin du compte à rebours. Tous les joueurs connectés participent (ils ont vu le compte à rebours
+   * et pouvaient quitter) ; les joueurs déconnectés à cet instant sont retirés du salon.
+   */
+  private beginGame() {
+    this.launchTimer?.clear();
+    this.launchTimer = null;
+    const participants = new Map<string, string>();
+    for (const [sessionId, player] of [...this.state.players]) {
+      if (player.connected) {
+        participants.set(sessionId, player.name);
+        continue;
+      }
+      this.state.players.delete(sessionId);
+      this.seats.get(sessionId)?.reject(new Error("game started"));
+    }
+    this.state.proposals.clear();
+    this.votes.clear();
+    this.state.phase = "playing";
+    void this.syncMetadata();
+    const matchId = randomUUID(); // clé d'idempotence de l'enregistrement des résultats
+    // Seul jeu disponible pour l'instant ; les suivants brancheront ici leur propre contrôleur.
+    this.blackjack = new BlackjackGame(this.state.blackjack, this.clock, {
+      decisionSeconds: Number(parseSettings(this.state.settings).decisionSeconds),
+      onFinished: () => {
+        this.blackjack = null;
+        this.state.phase = "results";
+        void this.syncMetadata();
+        void this.saveBlackjackResults(matchId);
+      },
+    });
+    this.blackjack.start(participants);
   }
 
   private simulate(seconds: number) {
@@ -277,7 +372,20 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     }
   }
 
+  /** Classement calculé ici, côté serveur : le client n'envoie jamais de score. */
+  private saveBlackjackResults(matchId: string) {
+    const table = [...this.state.blackjack.players];
+    const participants = table.flatMap(([sessionId, result]) => {
+      const player = this.state.players.get(sessionId);
+      if (player?.kind !== "user") return [];
+      const rank = 1 + table.filter(([, other]) => other.score > result.score).length;
+      return [{ user_id: player.id, rank, score: result.score, wins: result.wins, pushes: result.pushes, losses: result.losses }];
+    });
+    return recordMatch(matchId, this.state.gameId, this.state.blackjack.round, participants);
+  }
+
   private isValidChange(key: string, value: unknown): boolean {
+    if (this.state.phase !== "waiting") return false; // règles verrouillées dès le lancement
     return key === CAPACITY_KEY
       ? isValidCapacity(this.game, value, this.state.players.size)
       : isValidSetting(this.game, key, value);

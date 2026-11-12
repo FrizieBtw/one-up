@@ -10,6 +10,9 @@ export const LAUNCH_COUNTDOWN_SECONDS = 5;
 export const CHAT_MAX_LENGTH = 200;
 export const CHAT_RATE = { max: 5, windowMs: 10_000 };
 
+/** Blackjack : délai avant la manche suivante si l'hôte ne décide rien (évite les sessions bloquées). */
+export const BLACKJACK_NEXT_ROUND_SECONDS = 15;
+
 export const LOBBY_ROOM_NAME = "lobby";
 
 // ---------- Salle de lobby 3D ----------

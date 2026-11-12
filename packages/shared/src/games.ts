@@ -23,7 +23,7 @@ export const GAMES = [
     id: "blackjack",
     title: "Blackjack Battle",
     tagline: "Battez le croupier, grimpez au classement.",
-    status: "soon",
+    status: "available",
     minPlayers: 1,
     maxPlayers: 6,
     settings: [
@@ -105,6 +105,18 @@ export function isValidSetting(game: GameDefinition, key: string, value: unknown
     case "bool":
       return typeof value === "boolean";
   }
+}
+
+/**
+ * Raison empêchant l'hôte de lancer la partie, ou null si le lancement est permis.
+ * Seuls les joueurs connectés comptent ; il faut une majorité stricte de joueurs prêts.
+ */
+export function launchBlocker(game: GameDefinition, players: readonly { ready: boolean; connected: boolean }[]): string | null {
+  if (game.status !== "available") return "Ce jeu n'est pas encore disponible.";
+  const present = players.filter((p) => p.connected);
+  if (present.length < game.minPlayers) return `Il faut au moins ${game.minPlayers} joueurs.`;
+  if (present.filter((p) => p.ready).length * 2 <= present.length) return "Plus de la moitié des joueurs doivent être prêts.";
+  return null;
 }
 
 export function isValidCapacity(game: GameDefinition, capacity: unknown, currentPlayers = 0): capacity is number {

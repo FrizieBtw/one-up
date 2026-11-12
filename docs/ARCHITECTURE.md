@@ -24,6 +24,7 @@ apps/
   game-server/         Colyseus 0.18. src/app.ts (serveur + routes HTTP), src/rooms, src/auth.ts
 packages/
   shared/              config, catalogue des jeux, schémas de réglages, protocole, codes de salon
+  games/blackjack/     règles pures du blackjack
 supabase/
   config.toml          Supabase local
   migrations/          migrations SQL versionnées
@@ -31,8 +32,7 @@ docs/
 ```
 
 Paquets prévus, créés quand leur phase commence (pas de coquilles vides) :
-`packages/avatar` (phase 3), `packages/games/{blackjack,kart,party}` (phases 4, 8, 9),
-`packages/game-core` (phase 4, récompenses et cycle de partie), `assets/` (phase 2).
+`packages/games/{kart,party}` (phases 8, 9), `packages/game-core` (quand un second jeu partagera le cycle de partie).
 
 Écarts assumés par rapport au cahier des charges :
 
@@ -102,6 +102,10 @@ Client vers serveur :
 | `vote` | `{ id, approve }` | un vote par identité, modifiable ; n'applique rien |
 | `resolveProposal` | `{ id, accept }` | hôte seul ; la valeur est revalidée avant application |
 | `report` | `{ sessionId, reason? }` | 3 par minute ; journalisé côté serveur |
+| `start` / `cancelStart` | `{}` | hôte seul ; lance ou annule le compte à rebours |
+| `backToLobby` | `{}` | hôte seul, depuis l'écran de résultats |
+| `bjAction` | `{ action: "hit" \| "stand" }` | joueur dont c'est le tour |
+| `bjNext` / `bjEnd` | `{}` | hôte seul, entre deux manches |
 
 Un message qui ne respecte pas son schéma zod déconnecte le client (comportement de Colyseus) : le client officiel n'en envoie jamais.
 
@@ -114,6 +118,36 @@ Règles de salon :
 - Changer une règle ne réinitialise pas les statuts « prêt ».
 - Déconnexion : siège conservé 60 s (`RECONNECT_WINDOW_SECONDS`). Le client reprend son siège après un rechargement grâce au jeton de reconnexion (sessionStorage).
 - Hôte : s'il part, ou reste déconnecté plus de 10 s (`HOST_GRACE_SECONDS`), le rôle passe au joueur connecté le plus ancien. Un hôte revenu après transfert ne récupère pas le rôle.
+
+## Cycle de partie
+
+Phases du salon (`LobbySnapshot.phase`) : `waiting` → `countdown` → `playing` → `results` → `waiting`.
+
+- Lancement : `launchBlocker` (partagé client/serveur) exige le jeu disponible, le minimum de joueurs connectés et une majorité stricte de prêts.
+  Compte à rebours de 5 s, annulable par l'hôte, annulé d'office si une condition tombe.
+- À zéro, tous les joueurs connectés participent ; les déconnectés sont retirés du salon.
+- Dès le compte à rebours : plus d'entrée dans le salon (`IN_PROGRESS`, pas de spectateurs) et règles verrouillées.
+- La partie tourne dans le même salon Colyseus : un contrôleur par jeu (`apps/game-server/src/games/`) écrit dans un sous-état dédié (`state.blackjack`).
+- Fin de session : phase `results`, enregistrement des résultats, puis retour au lobby par l'hôte (statuts « prêt » remis à zéro).
+
+## Blackjack Battle
+
+Règles (pures et testées, `packages/games/blackjack`) :
+
+- 52 cartes remélangées à chaque manche. Actions : tirer ou rester. Pas de doublement, de séparation ni d'assurance.
+- As = 11 tant que la main ne dépasse pas 21, sinon 1. Atteindre 21 fait rester automatiquement.
+- Blackjack naturel (21 en deux cartes) : le joueur ne joue pas ; il bat un 21 en trois cartes ou plus, égalité contre un naturel du croupier.
+- Croupier : tire jusqu'à 17, reste sur tout 17 (souple compris). Ne tire pas si tous les joueurs ont dépassé 21.
+- Un joueur qui dépasse 21 perd, même si le croupier dépasse aussi.
+- Score : victoire 3, égalité 1, défaite 0. Aucune mise, aucun jeton engagé.
+
+Déroulement (serveur autoritaire, `apps/game-server/src/games/blackjack.ts`) :
+
+- Tours séquentiels dans l'ordre d'arrivée ; un seul joueur actif. Temps de décision relancé après chaque tirage.
+- Temps écoulé ou joueur déconnecté : il reste automatiquement. Départ définitif : il quitte la table, le tour passe au suivant.
+- La carte cachée du croupier n'est envoyée aux clients qu'à sa révélation.
+- Entre deux manches, l'hôte enchaîne ou termine ; sans décision, la manche suivante démarre après 15 s.
+- Classement : score décroissant, ex æquo au même rang.
 
 ## Paramètres de jeux
 
@@ -133,9 +167,12 @@ Hypothèse à confirmer : capacité maximale du blackjack fixée à 6.
 Migration actuelle : `profiles` (pseudo unique insensible à la casse, `public_id` court pour la recherche d'amis),
 créé automatiquement à l'inscription par le déclencheur `handle_new_user`. RLS : lecture publique (aucun e-mail), mise à jour du seul pseudo par son propriétaire.
 
+Résultats (phase 4) : `game_sessions`, `session_participants`, `player_stats`. Lecture publique, aucune écriture client.
+Le serveur de jeu appelle `record_match` avec la clé `service_role` ; l'identifiant de session sert de clé d'idempotence.
+Pas de table `match_results` séparée : `session_participants` porte le résultat de chaque joueur.
+
 Tables à venir, chacune dans la migration de sa phase :
 
-- Phase 4 : `game_sessions`, `session_participants`, `match_results`, `player_stats`
 - Phase 6 : `avatar_configurations`, `friendships`, `friend_requests`, `user_privacy_settings`, `progression`, `achievements`, `user_achievements`
 - Phase 7 : `wallets`, `wallet_transactions`, `shop_items`, `user_inventory`, `missions`, `mission_progress`
 

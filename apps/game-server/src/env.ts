@@ -14,4 +14,6 @@ export const env = {
   // Optionnels : sans eux, seuls les invités peuvent se connecter.
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+  // Optionnel : sans elle, les résultats de parties ne sont pas enregistrés. Ne jamais l'exposer au client.
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
 };
