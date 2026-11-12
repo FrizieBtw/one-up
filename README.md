@@ -28,7 +28,7 @@ Sans configuration, la plateforme tourne en mode invité : pseudo, cartouches 3D
 2. `npm run db:start` : lance Supabase en local et applique les migrations de `supabase/migrations`.
 3. Copier l'URL de l'API et la clé `anon` affichées dans :
    - `apps/web/.env.local` (modèle : `apps/web/.env.example`)
-   - `apps/game-server/.env` (modèle : `apps/game-server/.env.example`)
+   - `apps/game-server/.env.local` (modèle : `apps/game-server/.env.example`)
 4. Relancer `npm run dev`.
 
 Google et Discord : créer les identifiants OAuth chez chaque fournisseur, les placer dans `supabase/.env`
