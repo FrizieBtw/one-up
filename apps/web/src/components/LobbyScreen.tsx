@@ -20,11 +20,13 @@ import {
 } from "@stepup/shared";
 import { BlackjackScreen } from "@/blackjack/BlackjackScreen";
 import { MINI_ANCHOR, anchor } from "@/cartridge/anchors";
+import { playSfx } from "@/lib/audio";
 import { useBlocked } from "@/lib/blocked";
 import { useInputDevice } from "@/lib/input";
 import { connectLobby, describeJoinError } from "@/lib/lobby";
 import { useNav } from "@/lib/nav";
 import { CartridgeBack } from "./CartridgeBack";
+import { LaunchSequence } from "./LaunchSequence";
 import { Badge, Button, Card, Input } from "./ui";
 
 // WebGL : rendu côté client uniquement.
@@ -154,6 +156,18 @@ export function LobbyScreen({ code }: { code: string }) {
     feedList.current?.scrollTo({ top: feedList.current.scrollHeight });
   }, [feed.length]);
 
+  // La séquence de console ne joue qu'au lancement confirmé par le serveur (compte à rebours → partie),
+  // pas lors d'un rechargement en cours de partie ; elle est abandonnée si la partie s'arrête.
+  const phase = state?.phase;
+  const previousPhase = useRef(phase);
+  useEffect(() => {
+    const previous = previousPhase.current;
+    previousPhase.current = phase;
+    const { launch, setLaunch } = useNav.getState();
+    if (previous === "countdown" && phase === "playing") setLaunch("approach");
+    else if (phase !== "playing" && launch !== "idle") setLaunch("idle");
+  }, [phase]);
+
   const gameId = state?.gameId;
   useEffect(() => {
     if (gameId) setLobbyGame(gameId);
@@ -246,7 +260,10 @@ export function LobbyScreen({ code }: { code: string }) {
       aria-expanded={settingsOpen}
       disabled={state.phase !== "waiting"}
       className="fixed right-5 top-4 z-10 aspect-[1/1.25] h-28 cursor-pointer rounded-xl disabled:cursor-default"
-      onClick={() => setSettingsOpen(true)}
+      onClick={() => {
+        playSfx("flip");
+        setSettingsOpen(true);
+      }}
     />
   );
 
@@ -254,6 +271,7 @@ export function LobbyScreen({ code }: { code: string }) {
     return (
       <>
         {miniCartridge}
+        <LaunchSequence title={game.title} />
         <BlackjackScreen state={state} sessionId={room.sessionId} isHost={isHost} send={send} chat={chatCard} onQuit={goHome} />
       </>
     );

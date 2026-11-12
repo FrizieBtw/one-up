@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { ExtrudeGeometry, MathUtils, Shape, type Group } from "three";
 import { GAMES, type GameDefinition } from "@stepup/shared";
 import { useNav } from "@/lib/nav";
-import { CENTER_ANCHOR, MINI_ANCHOR, anchorRect, cellAnchor } from "./anchors";
+import { CENTER_ANCHOR, CONSOLE_ANCHOR, MINI_ANCHOR, PORT_ABOVE_ANCHOR, PORT_IN_ANCHOR, anchorRect, cellAnchor } from "./anchors";
 import { LABEL_ASPECT, cartridgeArt, createLabelTexture } from "./art";
 
 const WIDTH = 1;
@@ -53,6 +53,11 @@ function Cartridge({ game, index, geometry, reducedMotion }: { game: GameDefinit
       visible = true;
       flipped = nav.view === "cartridge" || nav.settingsOpen;
       anchorId = flipped ? CENTER_ANCHOR : MINI_ANCHOR;
+      // Lancement : la cartouche quitte le coin, se place au-dessus du port puis descend dans la console.
+      if (nav.launch !== "idle") {
+        flipped = false;
+        anchorId = nav.launch === "approach" ? PORT_ABOVE_ANCHOR : PORT_IN_ANCHOR;
+      }
     }
 
     const g = group.current;
@@ -131,6 +136,82 @@ function Cartridge({ game, index, geometry, reducedMotion }: { game: GameDefinit
   );
 }
 
+const CONSOLE_WIDTH = 2.4;
+
+/**
+ * Console fictive StepUp : boîtier trapu incliné vers le joueur, port à cartouche sur le dessus,
+ * marches en relief rappelant la silhouette des cartouches. Visible uniquement pendant un lancement.
+ */
+function Console({ reducedMotion }: { reducedMotion: boolean }) {
+  const group = useRef<Group>(null!);
+  useFrame(({ size, viewport }, delta) => {
+    const g = group.current;
+    const rect = anchorRect(CONSOLE_ANCHOR);
+    const active = useNav.getState().launch !== "idle" && rect !== undefined;
+    let scale = 0;
+    if (rect && active) {
+      const x = ((rect.left + rect.width / 2) / size.width - 0.5) * viewport.width;
+      const y = (0.5 - (rect.top + rect.height / 2) / size.height) * viewport.height;
+      scale = ((rect.width / size.width) * viewport.width) / CONSOLE_WIDTH;
+      // Première image : la console part du bas de l'écran, puis monte à sa place.
+      if (g.scale.x < 0.001) g.position.set(x, y - viewport.height * 0.6, 0);
+      const lambda = reducedMotion ? 1000 : 6;
+      g.position.x = x;
+      g.position.y = MathUtils.damp(g.position.y, y, lambda, delta);
+    }
+    g.scale.setScalar(active ? scale : MathUtils.damp(g.scale.x, 0, reducedMotion ? 1000 : 10, delta));
+    g.visible = g.scale.x > 0.001;
+  });
+
+  return (
+    <group ref={group} scale={0}>
+      <group rotation-x={0.5}>
+        <mesh>
+          <boxGeometry args={[CONSOLE_WIDTH, 0.7, 1.3]} />
+          <meshStandardMaterial color="#4a22c4" roughness={0.45} />
+        </mesh>
+        <mesh position-y={0.36}>
+          <boxGeometry args={[CONSOLE_WIDTH - 0.2, 0.04, 1.1]} />
+          <meshStandardMaterial color="#fff4dc" roughness={0.6} />
+        </mesh>
+        {/* Port à cartouche */}
+        <mesh position-y={0.385}>
+          <boxGeometry args={[1.3, 0.02, 0.26]} />
+          <meshBasicMaterial color={INK} />
+        </mesh>
+        {/* Bandeau et voyant en façade */}
+        <mesh position={[0, 0.08, 0.655]}>
+          <boxGeometry args={[CONSOLE_WIDTH, 0.12, 0.02]} />
+          <meshStandardMaterial color="#14c4bd" roughness={0.4} />
+        </mesh>
+        <mesh position={[-0.95, -0.14, 0.66]}>
+          <sphereGeometry args={[0.05, 12, 10]} />
+          <meshBasicMaterial color="#ffd23f" />
+        </mesh>
+        {/* Boutons */}
+        {(
+          [
+            [0.92, "#ff5c6c"],
+            [0.66, "#ffd23f"],
+          ] as const
+        ).map(([x, color]) => (
+          <mesh key={color} position={[x, 0.41, 0.36]}>
+            <cylinderGeometry args={[0.09, 0.09, 0.06, 20]} />
+            <meshStandardMaterial color={color} roughness={0.4} />
+          </mesh>
+        ))}
+        {/* Marches en relief, signature StepUp */}
+        {[0, 1].map((i) => (
+          <mesh key={i} position={[-0.98 + i * 0.16, 0.41 + i * 0.05, 0.36]}>
+            <boxGeometry args={[0.16, 0.06 + i * 0.1, 0.3]} />
+            <meshStandardMaterial color="#ff8a1f" roughness={0.5} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
 /** Canvas plein écran, non interactif : les clics passent par les ancres DOM. */
 export default function CartridgeScene() {
   const geometry = useMemo(createBodyGeometry, []);
@@ -147,6 +228,7 @@ export default function CartridgeScene() {
     >
       <ambientLight intensity={1.6} />
       <directionalLight position={[3, 5, 8]} intensity={2.2} />
+      <Console reducedMotion={reducedMotion} />
       {GAMES.map((game, index) => (
         <Cartridge key={game.id} game={game} index={index} geometry={geometry} reducedMotion={reducedMotion} />
       ))}

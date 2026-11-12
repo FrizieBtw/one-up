@@ -14,6 +14,10 @@ export const anchorRect = (id: string) => anchors.get(id)?.getBoundingClientRect
 export const cellAnchor = (gameId: string) => `cell:${gameId}`;
 export const CENTER_ANCHOR = "center";
 export const MINI_ANCHOR = "mini";
+// Séquence de lancement : console, et cartouche au-dessus du port puis insérée.
+export const CONSOLE_ANCHOR = "console";
+export const PORT_ABOVE_ANCHOR = "port-above";
+export const PORT_IN_ANCHOR = "port-in";
 
 /** Taille de la cartouche agrandie ; partagée par l'ancre centrale et le panneau du dos. */
 export const BIG_CARTRIDGE_CLASS =

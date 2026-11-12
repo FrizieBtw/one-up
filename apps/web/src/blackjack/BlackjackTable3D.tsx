@@ -1,10 +1,11 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { CanvasTexture, MathUtils, SRGBColorSpace, type Group } from "three";
 import type { BlackjackSnapshot, CardSnapshot } from "@stepup/shared";
 import { Avatar, lookFromId, type AvatarLook, type AvatarPose } from "@/avatar/Avatar";
+import { useNav } from "@/lib/nav";
 
 const CARD_W = 0.62;
 const CARD_H = 0.86;
@@ -124,6 +125,8 @@ function Seat({ name, look, angle, cards, isTurn, won }: { name: string; look: A
 /** Table de Blackjack Battle : croupier au fond, joueurs en arc de cercle devant la caméra. */
 export default function BlackjackTable3D({ blackjack, identities }: { blackjack: BlackjackSnapshot; identities: Record<string, string> }) {
   const dealerPose = useRef<AvatarPose>({ moving: false, emote: null });
+  // La séquence de lancement attend ce signal : scène chargée et contexte WebGL créé.
+  useEffect(() => () => useNav.getState().setGameReady(false), []);
   const seats = Object.entries(blackjack.players);
   const arc = Math.min(1.25, 0.35 * seats.length);
   const looks = useMemo(() => new Map<string, AvatarLook>(), []);
@@ -137,7 +140,10 @@ export default function BlackjackTable3D({ blackjack, identities }: { blackjack:
       aria-hidden
       className="rise-in !pointer-events-none !fixed inset-0 z-0"
       camera={{ fov: 32, position: [0, 11, 12] }}
-      onCreated={({ camera }) => camera.lookAt(0, 0.3, 0.3)}
+      onCreated={({ camera }) => {
+        camera.lookAt(0, 0.3, 0.3);
+        useNav.getState().setGameReady(true);
+      }}
       dpr={[1, 2]}
       gl={{ alpha: true, antialias: true }}
     >

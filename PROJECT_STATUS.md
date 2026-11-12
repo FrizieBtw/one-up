@@ -8,8 +8,9 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
 - **Phase 1 — Fondations** : terminée côté invité ; comptes Supabase écrits mais non vérifiés.
 - **Phase 2 — Accueil et cartouches** : terminée. Sons de cartouche non faits.
 - **Phase 3 — Lobbies sociaux** : terminée.
-- **Phase 4 — Blackjack Battle** : terminée pour les invités (branche `phase-4-blackjack`) ; sauvegarde des statistiques écrite mais non vérifiée.
-- Prochaine : **phase 5** (console fictive et animation d'insertion synchronisée au chargement).
+- **Phase 4 — Blackjack Battle** : terminée pour les invités ; sauvegarde des statistiques écrite mais non vérifiée.
+- **Phase 5 — Console et transitions** : terminée (branche `phase-5-console`).
+- Prochaine : **phase 6** (profils, éditeur d'avatar, amis, présence, XP, succès, classements). Elle exige Supabase, donc Docker démarré.
 
 ## Ce qui fonctionne réellement (vérifié)
 
@@ -36,6 +37,10 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
   repli automatique au chrono, score 3/1/0, manches illimitées, manche suivante automatique après 15 s, fin de session par l'hôte,
   écran de résultats, retour au lobby. Table 3D avec croupier, cartes animées, avatars, classement en direct, chat en jeu.
   Commandes clavier (T, R) et manette.
+- Console fictive originale et séquence de lancement : la cartouche quitte le coin, la console apparaît, la cartouche s'insère dans le port.
+  La séquence démarre à la confirmation serveur et ne se termine que lorsque la scène de jeu est chargée.
+  Bouton « Passer l'animation », qui ne fait jamais entrer avant que le jeu soit prêt.
+- Effets sonores synthétisés (sélection, retournement, insertion, prêt) avec bouton muet et volume des effets, mémorisés.
 - Modération de premier niveau : filtre de mots côté serveur, blocage local d'un joueur (messages masqués), signalement journalisé.
 
 Vérifications exécutées le 2026-11-12 :
@@ -44,13 +49,13 @@ Vérifications exécutées le 2026-11-12 :
   avec paquet truqué (conditions de lancement, annulations, entrée refusée en cours de partie, carte cachée absente de l'état,
   action hors tour refusée, chrono, manche automatique, départ de l'hôte pendant son tour, résultats, retour au lobby).
 - `npm run test:e2e` : deux parcours Playwright réussis (Chromium). Blackjack à deux joueurs : recherche publique avec un salon listé,
-  lancement bloqué puis permis, annulation, deux manches, chat en jeu, résultats, retour au lobby. Lobby avec 4 joueurs : dos de cartouche, Échap, création privée, code inconnu refusé,
+  lancement bloqué puis permis, annulation, séquence de console regardée par un joueur et passée par l'autre, réglage du son, deux manches, chat en jeu, résultats, retour au lobby. Lobby avec 4 joueurs : dos de cartouche, Échap, création privée, code inconnu refusé,
   jointure par code, salon privé absent de la recherche, règles au dos de la mini cartouche, annonce reçue, proposition, votes et validation,
   déplacement au clavier vu par l'autre joueur, chat filtré, blocage et déblocage, signalement, lien de partage, rechargement sans doublon,
   départ de l'hôte et transfert du rôle.
 - `npm run typecheck` et `npm run build` : sans erreur.
 - Rendu contrôlé sur captures d'écran Playwright (grille, dos de cartouche, règles, propositions, salle 3D, table de blackjack,
-  fin de manche, résultats).
+  fin de manche, résultats, console avec cartouche insérée).
 
 ## Écrit mais non vérifié
 
@@ -59,6 +64,8 @@ Vérifications exécutées le 2026-11-12 :
   Pour vérifier : démarrer Docker Desktop, `npm run db:start`, remplir les fichiers `.env` (voir README), tester inscription et connexion.
 - **Sauvegarde des statistiques** : migration `match_results` et appel `record_match` écrits, jamais exécutés (Docker arrêté).
   Elle ne concerne que les comptes ; avec des invités, rien n'est enregistré.
+- Effets sonores : le code s'exécute sans erreur, mais aucun son n'a été écouté (navigateur de test sans sortie audio).
+- Séquence de lancement quand le jeu charge lentement (état « Chargement du jeu… ») : en local le jeu est prêt avant la fin de l'animation.
 - Commandes de jeu au clavier (T, R) : branchées, mais le parcours automatisé clique sur les boutons.
 - Blackjack à plus de 2 joueurs dans le navigateur : la logique serveur est générique, l'affichage à 6 n'a pas été vu.
 - Transfert d'hôte après 10 s de déconnexion : seul le départ volontaire est testé.
@@ -70,14 +77,15 @@ Vérifications exécutées le 2026-11-12 :
 ## Limitations connues
 
 - Kart Rush et Party Worlds marqués « bientôt » : leur salon existe, le lancement y est refusé.
-- Pas de console ni d'animation d'insertion : le passage lobby → partie est direct (phase 5).
+- Pas de musique (seulement des effets) : le réglage de volume musique viendra avec elle.
+- La console n'apparaît qu'au lancement ; pas d'animation de retour vers le lobby en fin de session.
 - Écran de résultats sans XP ni jetons (phases 6 et 7).
-- Blackjack : pas d'effets sonores ; la carte du croupier n'a pas d'animation de retournement.
+- Blackjack : pas d'effets sonores propres au jeu ; la carte du croupier n'a pas d'animation de retournement.
 - Filtre de chat : liste de mots courte, à remplacer avant ouverture publique. Signalements seulement journalisés, sans outil de modération.
   Blocage stocké dans le navigateur, pas dans le compte.
 - Pas de collisions entre avatars ni avec le décor. Avatars sans éditeur : apparence dérivée de l'identité.
 - Une seule salle de lobby, commune à tous les jeux (les salles thématiques restent possibles : le décor est un composant isolé).
-- Aucun son, pas de réglage de qualité graphique.
+- Pas de réglage de qualité graphique.
 - Deux canvas WebGL rendent en continu dans le lobby : à mesurer et optimiser en phase 10.
 - Limiteurs de débit en mémoire, un seul processus serveur.
 - Tester à deux exige deux navigateurs distincts : deux onglets partagent la même identité invitée.
@@ -102,13 +110,15 @@ Vérifications exécutées le 2026-11-12 :
 1. Démarrer Docker Desktop pour activer et vérifier les comptes en local (ou décider d'utiliser un projet Supabase hébergé).
 2. Identifiants OAuth Google et Discord.
 
-## Prochaines étapes (phase 5)
+## Prochaines étapes (phase 6)
 
-1. Console fictive originale (modèle 3D procédural) dans la scène des cartouches.
-2. Au lancement : la cartouche quitte le coin, la console apparaît, insertion animée.
-3. Synchronisation avec l'état serveur : l'animation se termine quand la phase `playing` est effective et la scène de jeu chargée.
-4. Bouton « Passer l'animation », sans entrer avant que tout soit prêt ; annulation propre si le serveur annule.
-5. Premiers effets sonores (insertion, sélection) avec réglages musique, effets et muet.
+Préalable : Docker démarré, `npm run db:start`, fichiers `.env` remplis ; vérifier d'abord les migrations et la connexion par compte
+écrites en phases 1 et 4, jamais exécutées.
+
+1. Migrations : `avatar_configurations`, `friendships`, `friend_requests`, `user_privacy_settings`, `progression`, `achievements`, `user_achievements`.
+2. Éditeur d'avatar (visage, coiffure, yeux, couleurs, tenue) avec aperçu 3D ; `lookFromId` devient le repli des invités.
+3. Page de profil, recherche et demandes d'amis, présence avec réglages de confidentialité.
+4. XP et niveaux attribués côté serveur dans `record_match`, succès, classements mondial et entre amis.
 
 ## Repères dans le code
 
@@ -137,6 +147,8 @@ Vérifications exécutées le 2026-11-12 :
 | Partie de blackjack (serveur) | `apps/game-server/src/games/blackjack.ts` |
 | Écran et table de blackjack | `apps/web/src/blackjack/` |
 | Enregistrement des résultats | `apps/game-server/src/persistence.ts`, `supabase/migrations/20261112000100_match_results.sql` |
+| Console et séquence de lancement | `apps/web/src/cartridge/CartridgeScene.tsx` (`Console`), `apps/web/src/components/LaunchSequence.tsx` |
+| Effets sonores et réglages | `apps/web/src/lib/audio.ts` |
 | Design system | `apps/web/src/app/globals.css`, `apps/web/src/components/ui.tsx` |
 | Test de parcours | `tests/e2e/lobby.spec.ts` |
 

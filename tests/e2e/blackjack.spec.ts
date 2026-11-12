@@ -50,6 +50,22 @@ test("blackjack : recherche publique, lancement, deux manches, résultats, retou
   await expect(bob.getByRole("status").filter({ hasText: "Lancement annulé." })).toBeVisible();
   await launch.click();
 
+  // Console : la séquence d'insertion joue chez tous. Bob la passe et arrive tout de suite en jeu (la scène est prête) ;
+  // Alice la regarde jusqu'au bout.
+  const sequence = (page: Page) => page.getByText(/Insertion de Blackjack Battle|Chargement du jeu/);
+  await expect(sequence(alice)).toBeVisible({ timeout: 10_000 }); // après les 5 s de compte à rebours
+  await bob.getByRole("button", { name: "Passer l'animation" }).click();
+  await expect(sequence(bob)).toHaveCount(0);
+  await expect(alice.getByText("Insertion de Blackjack Battle…")).toBeVisible();
+  await alice.waitForTimeout(1100);
+  await alice.screenshot({ path: "test-results/11-console.png" });
+  await expect(sequence(alice)).toHaveCount(0);
+
+  // Son : réglage accessible et mémorisé.
+  await alice.getByRole("button", { name: "Son activé" }).click();
+  await expect(alice.getByRole("button", { name: "Son coupé" })).toHaveAttribute("aria-pressed", "true");
+  await expect(alice.getByLabel("Volume des effets sonores")).toBeDisabled();
+
   // Manche 1.
   await expect(bob.getByRole("heading", { name: "Manche 1" })).toBeVisible({ timeout: 10_000 });
   await expect(alice.getByText(/Croupier : \d+ \+ carte cachée/)).toBeVisible();

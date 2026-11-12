@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { APP_NAME, getGame } from "@stepup/shared";
 import { BIG_CARTRIDGE_CLASS, CENTER_ANCHOR, anchor } from "@/cartridge/anchors";
+import { useAudio } from "@/lib/audio";
 import { useNav } from "@/lib/nav";
 import { logout, useSession } from "@/lib/session";
 import { AuthPanel } from "./AuthPanel";
@@ -36,6 +37,7 @@ export function StepUpApp() {
   }, []);
 
   const signedIn = session.loaded && session.name !== null;
+  const audio = useAudio();
 
   return (
     <>
@@ -45,6 +47,24 @@ export function StepUpApp() {
       <main className="mx-auto flex max-w-5xl flex-col gap-8 px-5 py-8">
         <header className={`flex flex-wrap items-center gap-4 ${view === "lobby" ? "pr-28" : ""}`}>
           <h1 className="grow text-5xl text-violet [text-shadow:0_4px_0_var(--color-sun)]">{APP_NAME}</h1>
+          {session.loaded && (
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <button type="button" className="rounded-full border-2 border-ink bg-white px-3 py-0.5" aria-pressed={audio.muted} onClick={() => audio.setMuted(!audio.muted)}>
+                {audio.muted ? "Son coupé" : "Son activé"}
+              </button>
+              <input
+                type="range"
+                aria-label="Volume des effets sonores"
+                className="w-20 accent-violet"
+                min={0}
+                max={1}
+                step={0.1}
+                disabled={audio.muted}
+                value={audio.sfxVolume}
+                onChange={(e) => audio.setSfxVolume(Number(e.target.value))}
+              />
+            </div>
+          )}
           {session.name && (
             <div className="flex items-center gap-3">
               <span className="font-bold">{session.name}</span>

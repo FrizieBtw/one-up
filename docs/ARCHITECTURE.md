@@ -130,6 +130,20 @@ Phases du salon (`LobbySnapshot.phase`) : `waiting` → `countdown` → `playing
 - La partie tourne dans le même salon Colyseus : un contrôleur par jeu (`apps/game-server/src/games/`) écrit dans un sous-état dédié (`state.blackjack`).
 - Fin de session : phase `results`, enregistrement des résultats, puis retour au lobby par l'hôte (statuts « prêt » remis à zéro).
 
+## Console et séquence de lancement
+
+- La console fictive vit dans le canvas des cartouches (`CartridgeScene.tsx`) et s'aligne, comme elles, sur des ancres DOM.
+- Déclenchement : uniquement quand le client observe la transition serveur `countdown` → `playing`. Un rechargement en cours de partie
+  ne rejoue pas l'animation ; si la partie s'arrête pendant la séquence, elle est abandonnée.
+- Étapes (`nav.launch`) : `approach` (la cartouche quitte le coin, la console monte) → `insert` (descente dans le port, son) → `loading`.
+- Fin : seulement quand `nav.gameReady` est vrai, c'est-à-dire scène de jeu chargée et contexte WebGL créé. Le jeu se charge derrière la séquence.
+- « Passer l'animation » saute à `loading` : on n'entre donc jamais avant que le serveur et la scène soient prêts.
+
+## Audio
+
+Effets synthétisés par Web Audio (`apps/web/src/lib/audio.ts`), sans fichier : sélection, retournement, insertion, prêt.
+Le contexte audio est créé au premier son, donc après une interaction. Réglages mémorisés : muet et volume des effets.
+
 ## Blackjack Battle
 
 Règles (pures et testées, `packages/games/blackjack`) :

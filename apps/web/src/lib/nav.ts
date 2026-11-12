@@ -17,6 +17,10 @@ interface Nav {
   /** Lobby : cartouche agrandie, réglages affichés au dos. */
   settingsOpen: boolean;
   hovered: string | null;
+  /** Séquence de lancement : approche de la console, insertion, attente du chargement réel. */
+  launch: "idle" | "approach" | "insert" | "loading";
+  /** La scène de jeu est chargée et affichable. */
+  gameReady: boolean;
 
   select(gameId: string): void;
   setPanel(panel: CartridgePanel): void;
@@ -24,6 +28,8 @@ interface Nav {
   enterLobby(code: string, gameId: string | null): void;
   setLobbyGame(gameId: string): void;
   setSettingsOpen(open: boolean): void;
+  setLaunch(launch: Nav["launch"]): void;
+  setGameReady(ready: boolean): void;
   /** Retour d'un cran (Échap, bouton retour). Ne quitte jamais un salon. */
   back(): void;
   goHome(): void;
@@ -41,6 +47,8 @@ export const useNav = create<Nav>((set, get) => ({
   code: null,
   settingsOpen: false,
   hovered: null,
+  launch: "idle",
+  gameReady: false,
 
   select: (gameId) => set({ view: "cartridge", gameId, panel: "menu", hovered: null }),
   setPanel: (panel) => set({ panel }),
@@ -51,6 +59,8 @@ export const useNav = create<Nav>((set, get) => ({
   },
   setLobbyGame: (gameId) => set({ gameId }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  setLaunch: (launch) => set({ launch, settingsOpen: false }),
+  setGameReady: (gameReady) => set({ gameReady }),
   back: () => {
     const { view, panel, settingsOpen } = get();
     if (view === "cartridge") set(panel === "menu" ? { view: "home", gameId: null } : { panel: "menu" });
@@ -58,7 +68,7 @@ export const useNav = create<Nav>((set, get) => ({
   },
   goHome: () => {
     void leaveLobby();
-    set({ view: "home", gameId: null, code: null, settingsOpen: false });
+    set({ view: "home", gameId: null, code: null, settingsOpen: false, launch: "idle" });
     setUrl("/");
   },
   syncFromUrl: () => {
