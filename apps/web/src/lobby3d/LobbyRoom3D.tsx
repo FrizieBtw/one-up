@@ -5,10 +5,10 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { MathUtils, type Group } from "three";
 import {
-  EMOTES,
   EMOTE_DURATION_MS,
   LOBBY_RADIUS,
   parseAvatarConfig,
+  parseCosmetics,
   stepLobbyPosition,
   type ClientMessage,
   type EmoteId,
@@ -17,6 +17,7 @@ import {
 } from "@stepup/shared";
 import { Avatar, lookFromId, type AvatarPose } from "@/avatar/Avatar";
 import { attachInput, readGamepadPresses, readMove } from "@/lib/input";
+import { availableEmotes, useEconomy } from "@/lib/economy";
 import { useNav } from "@/lib/nav";
 
 const MOVE_SEND_INTERVAL_MS = 50;
@@ -33,6 +34,8 @@ function AvatarEntity({ room, sessionId, isLocal, connected, emotes }: { room: R
   // Identité et nom ne changent pas pendant la vie d'une session.
   const initial = (room.state.players as LivePlayers).get(sessionId);
   const look = useMemo(() => parseAvatarConfig(initial?.avatar) ?? lookFromId(initial?.id ?? sessionId), [initial?.avatar, initial?.id, sessionId]);
+
+  const cosmetics = useMemo(() => parseCosmetics(initial?.cosmetics), [initial?.cosmetics]);
 
   useFrame((_, delta) => {
     const player = (room.state.players as LivePlayers).get(sessionId);
@@ -87,7 +90,7 @@ function AvatarEntity({ room, sessionId, isLocal, connected, emotes }: { room: R
 
   return (
     <group ref={group}>
-      <Avatar look={look} name={initial?.name} pose={pose} faded={!connected} />
+      <Avatar look={look} name={initial?.name} pose={pose} faded={!connected} cosmetics={cosmetics} />
     </group>
   );
 }
@@ -138,11 +141,11 @@ function RoomDecor() {
 function useEmoteShortcuts(room: Room) {
   useEffect(() => {
     const send = (index: number) => {
-      const emote = EMOTES[index];
+      const emote = availableEmotes(useEconomy.getState())[index];
       if (emote) room.send("emote", { id: emote.id } satisfies ClientMessage<"emote">);
     };
     const detach = attachInput((code) => {
-      const digit = /^(?:Digit|Numpad)([1-4])$/.exec(code);
+      const digit = /^(?:Digit|Numpad)([1-6])$/.exec(code);
       if (digit) send(Number(digit[1]) - 1);
     });
     const poll = setInterval(() => readGamepadPresses().forEach((button) => button < 4 && send(button)), 50);

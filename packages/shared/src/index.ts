@@ -5,5 +5,6 @@ export * from "./protocol";
 export * from "./movement";
 export * from "./moderation";
 export * from "./avatar";
+export * from "./cosmetics";
 export * from "./progression";
 export * from "./presence";

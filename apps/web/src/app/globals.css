@@ -15,6 +15,35 @@
   --font-display: var(--font-baloo), "Trebuchet MS", sans-serif;
   --font-sans: var(--font-nunito), system-ui, sans-serif;
 
+  /* Direction OneUP « Nuit douce » (maquettes dans docs/maquettes) : ajoutée à côté de l'ancien système,
+     les écrans non encore refaits gardent les jetons ci-dessus. */
+  --color-night: #1c1840;
+  --color-night-panel: #352f6b;
+  --color-floor: #453f88;
+  --color-wall: #6a62b8;
+  --color-hud-ink: #2a2750;
+  --color-hud-accent: #6f5be0;
+  --color-hud-soft: #f1eeff;
+  --color-hud-muted: #7a77a0;
+  --color-hud-line: #cfcbe8;
+  --color-hud-divider: #eceaf6;
+  --color-hud-field: #f7f6fd;
+  --color-hud-ok: #1f8a58;
+  --color-hud-ok-soft: #e3f6ec;
+  --color-hud-bad: #c4243b;
+  --color-hud-bad-soft: #ffe9ec;
+  --color-hud-bad-line: #e0364f;
+  --color-pastel-pink: #ff9eb5;
+  --color-pastel-sun: #ffe08a;
+  --color-pastel-mint: #8fe3c0;
+  --color-pastel-lavender: #b9a3f5;
+  --color-pastel-sky: #7ec8f5;
+  --color-outline: #0f0d22;
+  --font-hud: var(--font-outfit), system-ui, sans-serif;
+  --font-pixel: var(--font-jersey15), "Courier New", monospace;
+  --font-pixel-body: var(--font-jersey25), "Courier New", monospace;
+  --radius-hud: 18px;
+
   --radius-chunk: 1.5rem;
   /* Relief « autocollant » : ombre dure décalée, signature visuelle des cartes et boutons. */
   --shadow-chunk: 0 6px 0 var(--color-ink);
@@ -35,6 +64,12 @@ h2,
 h3 {
   font-family: var(--font-display);
   line-height: 1.1;
+}
+
+/* Tailwind retire le curseur main des boutons : on le remet pour tout ce qui se clique (boutons, onglets). */
+button:not(:disabled),
+[role="tab"] {
+  cursor: pointer;
 }
 
 :focus-visible {

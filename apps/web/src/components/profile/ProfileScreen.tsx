@@ -27,13 +27,18 @@ import {
   type SearchResult,
 } from "@/lib/social";
 import { Badge, Button, Card, Input } from "../ui";
+import { equippedPayload, useEconomy } from "@/lib/economy";
 import { AvatarEditor } from "./AvatarEditor";
+import { InventoryTab, MissionsTab, ShopTab } from "./EconomyTabs";
 
 const AvatarPreview = dynamic(() => import("./AvatarEditor").then((m) => m.AvatarPreview), { ssr: false });
 
 const TABS = [
   ["profile", "Profil"],
   ["avatar", "Avatar"],
+  ["shop", "Boutique"],
+  ["inventory", "Inventaire"],
+  ["missions", "Missions"],
   ["friends", "Amis"],
   ["leaderboards", "Classements"],
   ["privacy", "Confidentialité"],
@@ -117,6 +122,9 @@ export function ProfileScreen({ userId, onHome }: { userId: string; onHome: () =
       <div role="tabpanel" aria-label={TABS.find(([id]) => id === tab)![1]}>
         {tab === "profile" && <ProfileTab profile={profile} avatar={avatar} />}
         {tab === "avatar" && <AvatarTab userId={userId} profile={profile} initial={avatar} onSaved={reload} />}
+        {tab === "shop" && <ShopTab look={avatar} name={profile.username} />}
+        {tab === "inventory" && <InventoryTab userId={userId} />}
+        {tab === "missions" && <MissionsTab userId={userId} />}
         {tab === "friends" && friends && <FriendsTab userId={userId} data={friends} onChange={reloadFriends} />}
         {tab === "leaderboards" && <LeaderboardsTab userId={userId} friends={friends?.friends ?? []} />}
         {tab === "privacy" && <PrivacyTab userId={userId} initial={profile.privacy} onSaved={reload} />}
@@ -125,11 +133,19 @@ export function ProfileScreen({ userId, onHome }: { userId: string; onHome: () =
   );
 }
 
+const DECORATION_STYLE: Record<string, { ring: string; label: string }> = {
+  stars: { ring: "ring-4 ring-sun", label: "★ Cadre étoilé" },
+  flames: { ring: "ring-4 ring-orange", label: "Cadre en flammes" },
+};
+
 function ProfileTab({ profile, avatar }: { profile: MyProfile; avatar: AvatarConfig }) {
   const stats = profile.stats;
+  const decoration = useEconomy((s) => equippedPayload(s, "decoration")?.decoration);
+  const frame = typeof decoration === "string" ? DECORATION_STYLE[decoration] : undefined;
   return (
     <div className="grid gap-5 md:grid-cols-[18rem_1fr]">
-      <Card className="flex flex-col items-center gap-2">
+      <Card className={`flex flex-col items-center gap-2 ${frame?.ring ?? ""}`}>
+        {frame && <Badge className="bg-sun">{frame.label}</Badge>}
         <AvatarPreview config={avatar} name={profile.username} className="h-72 w-full" />
         <p className="text-sm font-bold text-ink/70">
           Identifiant <span className="rounded-md bg-sun px-1.5 font-display tracking-widest text-ink">{profile.publicId}</span>

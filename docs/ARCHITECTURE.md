@@ -60,7 +60,7 @@ Le dos de cartouche est un panneau DOM (`role="dialog"`) calé sur la plaque cla
 - Déplacement : le client envoie une direction, le serveur simule à 20 Hz avec `stepLobbyPosition` (`packages/shared/src/movement.ts`).
   Le joueur local est prédit avec la même fonction puis rappelé doucement vers la position serveur ; les autres sont interpolés.
 - Les positions sont lues à chaque image dans l'état Colyseus, sans rendu React (l'interface ignore `x`, `z`, `dx`, `dz`).
-- Avatar chibi procédural unique (`apps/web/src/avatar/Avatar.tsx`) : apparence dérivée de l'identité en attendant l'éditeur (phase 6),
+- Avatar unique (`apps/web/src/avatar/Avatar.tsx`, personnage KayKit assemblé depuis le chantier graphique ; avatar procédural d'origine supprimé) : apparence dérivée de l'identité en attendant l'éditeur (phase 6),
   animations repos, marche, salut, danse, bravo, rire.
 - Entrées (`apps/web/src/lib/input.ts`) : actions abstraites lues au clavier (codes physiques, donc ZQSD et WASD) ou à la manette (Gamepad API).
 
@@ -206,6 +206,7 @@ non exposé par l'API.
 | `…000200_revoke_handle_new_user` | retire l'exécution publique du déclencheur d'inscription |
 | `…000300_social_progression` | avatars, confidentialité, amis, progression, succès, nouvelle `record_match` |
 | `…000400_backfill_profiles` | crée le profil des comptes antérieurs au déclencheur |
+| `20261113000000_economy` | réglages d'économie, portefeuilles, boutique, inventaire, missions ; `record_match` verse jetons et missions |
 
 Règles d'accès :
 
@@ -224,11 +225,119 @@ Progression (`packages/shared/src/progression.ts`) : le niveau n s'atteint à 50
 XP par session : 20 de participation, 10 par manche gagnée, 5 par égalité, 25 si premier d'une session à 2 joueurs ou plus.
 Succès : première table, premier coup gagnant, habitué (5 sessions), main chanceuse (25 manches gagnées), champion de table (3 sessions gagnées).
 
-Tables à venir, chacune dans la migration de sa phase :
-
-- Phase 7 : `wallets`, `wallet_transactions`, `shop_items`, `user_inventory`, `missions`, `mission_progress`
-
 Pas de table `match_results` séparée : `session_participants` porte le résultat de chaque joueur.
+
+## Économie : jetons, boutique, missions
+
+Les jetons sont fictifs, liés aux comptes, et n'achètent que des cosmétiques. Aucun objet ne donne d'avantage en jeu, et aucune partie n'engage de jetons.
+
+Base (`supabase/migrations/20261113000000_economy.sql`) :
+
+- `economy_settings` (une ligne, lecture seule côté client) : solde initial (200), aide de reprise (sous 20 jetons, +100, une fois par 24 h),
+  jetons de session (10 + 2 par manche gagnée, plafonnés à 150 par jour UTC et par joueur). Tout est modifiable en base sans toucher au code.
+- `wallets` (solde, jamais négatif : contrainte `check`) et `wallet_transactions` (historique). La clé unique `(compte, nature, référence)` interdit
+  d'enregistrer deux fois la même récompense, le même achat ou la même mission.
+- Aucune écriture directe par les clients. Tout passe par des fonctions :
+  - `purchase_item` : verrouille le portefeuille (les achats d'un compte sont sérialisés), refuse un objet déjà possédé ou un solde insuffisant ;
+    renvoie `ok`, `not_found`, `already_owned`, `insufficient`.
+  - `set_equipped` : équipe ou retire un objet possédé, un seul équipé par catégorie.
+  - `claim_recovery` : `ok`, `not_eligible` (solde suffisant) ou `cooldown`. Indépendante de tout jeu.
+  - `record_match` (serveur de jeu seul) : en plus de l'XP, verse les jetons de session et fait avancer les missions.
+- Création du portefeuille : par le déclencheur d'inscription (sans jamais le bloquer) et, au besoin, par toute fonction qui y touche.
+- Boutique : `shop_items` (catégories tenues, accessoires, emotes, cartouches, cadres de profil ; prix et charge utile). `user_inventory` : objets possédés et équipés.
+- Missions : `missions` (quotidiennes, remises à zéro à minuit UTC ; défis uniques) et `mission_progress`. Mesures : sessions, manches gagnées,
+  première place, session parfaite (toutes les manches gagnées, au moins 3). Récompense versée une seule fois par mission et par période.
+  Elles ne progressent qu'à l'enregistrement d'une session par le serveur : le client ne peut pas déclarer une mission accomplie.
+- Anti-abus : plafond quotidien de jetons de session, une session de zéro manche ne rapporte rien, récompenses idempotentes par session.
+
+Cosmétiques en jeu :
+
+- À la connexion d'un compte, le serveur lit ses objets (`fetchCosmetics`) : apparence équipée (tenue premium, casquette ou lunettes) copiée dans l'état du joueur
+  (`Player.cosmetics`) et rendue par le composant `Avatar` pour tous ; emotes possédées gardées côté serveur seulement.
+- Emotes de boutique (`spin`, `bow`) : le serveur refuse (`FORBIDDEN`) toute emote qu'un joueur ne possède pas ; les quatre gratuites restent ouvertes à tous.
+- Fini de cartouche et cadre de profil : appliqués côté client à partir des objets équipés du compte (état partagé `useEconomy`, `apps/web/src/lib/economy.ts`).
+- Interface (profil, comptes seulement) : Boutique (essayage sur l'aperçu 3D, achat en deux temps), Inventaire (équipement, historique, aide de reprise), Missions.
+  Le solde s'affiche dans l'en-tête et se rafraîchit après chaque achat et chaque récompense de session.
+
+## Éditeur de personnage KayKit (chantier graphique, en cours)
+
+Décision du porteur : remplacer l'avatar procédural par des personnages KayKit (CC0), assemblés à partir de pièces. Étapes 1 à 4 faites.
+
+Constats mesurés sur les assets (dossier source hors dépôt) :
+
+- Tous les personnages humanoïdes KayKit partagent le même squelette de 23 os (noms et matrices inverses identiques) : têtes, corps, bras, jambes et accessoires de personnages différents s'emboîtent.
+  Pièces standard : `Head`, `Body`, `ArmLeft`, `ArmRight`, `LegLeft`, `LegRight`, plus des accessoires rigides (`Hat`, `Glasses`, `Cape`, `Backpack`…) accrochés à un os.
+- Cheveux, yeux et barbe sont fondus dans le maillage `Head` et sa texture. Chaque pièce y est pourtant une coque de géométrie distincte, colorée par une case de palette.
+- Textures : palettes de 8 colonnes × 4 lignes de dégradés verticaux. Convention constante : case 0 = peau, case 1 = couleur des cheveux, case 2 = noir des yeux.
+  L'axe vertical des UV glTF a son origine en haut (`ligne = floor(v × 4)`).
+- Aucune animation de danse dans les assets. Les animations viennent de fichiers de rig séparés (`Rig_Medium_*`) : repos, marche, course, saut, salut, applaudissements, assis.
+
+Étape 1 — découpe des têtes (`apps/web/src/avatar/parts/`) :
+
+- `splitHead.ts` : fonction pure (sans three.js). Soude les sommets par position, relie les triangles voisins de même case de palette, puis attribue un rôle à chaque coque :
+  peau, oreille, nez, œil, sourcil, cheveux, barbe. Repères : convention de palette, puis position (yeux sombres devant, barbe sous les yeux, sourcils au-dessus).
+- `catalogue.ts` : 29 têtes décrites. 22 utilisables (9 bases de crâne complètes, 13 sources de coiffure et de barbe), 7 écartées avec leur raison (capuches, masque, cache-œil, créatures, maquillage).
+  Chaque entrée peut porter des corrections de palette (`overrides`) ; aucune n'a été nécessaire avec la convention de palette.
+- `readGlb.node.ts` : lecteur de GLB pour Node (tests et scripts seulement) ; `pngjs` décode la palette.
+- Planche de contrôle `/dev/avatar-parts?page=N` (404 en production) : rôles en couleurs et version chauve de chaque tête.
+- Fichiers copiés dans `apps/web/public/models/kaykit/` (31 personnages et 3 fichiers d'animations, 13,9 Mo), crédits CC0 dans `apps/web/public/models/CREDITS.md`.
+
+Limites connues de l'étape 1 : certaines têtes ont un crâne ouvert sous les cheveux (donc inutilisables comme base chauve) ; les yeux sont tous des ovales noirs ;
+le nez est fondu dans la coque de peau sur quelques têtes.
+
+Étape 2 — corps, accessoires, recoloration (faite) :
+
+- `palette.ts` : recoloration pure (sans three.js). Une palette est lue en dégradés (haut, milieu, bas) par case ; `recolorGradient` remplace la teinte en gardant l'écart de luminosité
+  et de saturation de la case d'origine ; `renderPalette` reconstruit l'image 256 × 128 avec les cases remplacées (peau = case 0, cheveux = case 1). Les UV des pièces ne changent pas.
+- `partsCatalogue.ts` : 22 tenues (haut = `Body` + bras, bas = jambes, pris dans le même personnage) et 24 accessoires (chapeaux, lunettes, masque, bandeaux, capes, sacs).
+  Écartés : armes et objets (Cigar, HolyWater, WindupKey, Quiver). Les tests vérifient fichiers, maillages, type (habillé ou rigide) et os d'accroche sur les vrais GLB.
+- `assemble.ts` (three.js, navigateur) : assemble tête + haut + bas + accessoires sur le squelette d'un fichier. Deux pièges mesurés :
+  1. l'ordre des 23 os diffère selon les fichiers (les poids de peau désignent les os par rang) : chaque pièce reçoit son propre `Skeleton` (ordre et matrices inverses du fichier source)
+     qui pointe vers les os du personnage assemblé ;
+  2. un maillage glTF à plusieurs matériaux devient plusieurs maillages three (`Nom_1`, `Nom_2`), dont certains sans texture (verres) : il faut tous les prendre.
+- Planche d'essai `/dev/avatar-assembly` (404 en production) : 8 assemblages de pièces de fichiers différents avec peau et cheveux recolorés, dans une seule scène (comme un salon) ;
+  capture dans `test-results/avatar-assembly.png`. Rendre plusieurs scènes l'une après l'autre dans un même rendu avec scissor a produit des pièces invisibles : ne pas le reproduire.
+
+Étape 3 — moteur d'animation et branchement (faite) :
+
+- `animations.ts` : charge les 3 fichiers `Rig_Medium_*` ; clips utilisés : `Idle_A` (repos), `Walking_A` (marche), `Waving` (salut), `Cheering` (bravo). Appliqués aux os par leur nom.
+- `KayKitAvatar.tsx` : `useAssembledModel` assemble le personnage (asynchrone, libère matériaux et palettes au démontage) ; `KayKitBody` joue les clips avec fondu de 0,2 s
+  et complète les emotes sans clip par des rotations d'os (danse : hanches et bras ; rire : tête ; révérence : colonne ; toupie : rotation du groupe).
+  Échelle 0,48 pour garder la taille de l'ancien avatar.
+- `lookMapping.ts` : passerelle temporaire de l'ancienne configuration (couleurs, style de cheveux) vers une pièce : style de cheveux → tête, couleur de tenue → tenue (par empreinte), lunettes et casquette de boutique → accessoires.
+- `Avatar.tsx` : `Avatar` garde les mêmes propriétés ; il affiche le personnage KayKit ; l'avatar procédural d'origine (sphères et capsules) est supprimé. Pendant le chargement du modèle, seuls ombre, nom et effets sont dessinés.
+  Plus aucun élément dessiné à la main sur les personnages : le nœud papillon, la couronne et les effets (étincelles, bulles) ont été retirés du code et de la boutique. Seule l'ombre de contact (disque sous les pieds) reste.
+- Planche `/dev/avatar-anim` (404 en production) : 8 états côte à côte, capture `test-results/avatar-anim.png`.
+
+Étape 4 — éditeur, format v2, boutique (faite) :
+
+- Format (`packages/shared/src/avatar.ts`, source unique pour éditeur, rendu et serveur) : v2 à l'origine de l'étape 4 (`skull, hair, beard, eyes…`), remplacé par la v3 plus bas.
+  Peau et cheveux sont des couleurs (6 teints, 8 couleurs) ; le reste désigne le personnage KayKit dont on prend la pièce. `acc` : un accessoire au plus par emplacement
+  (chapeau, lunettes, masque, bandeau, cape, sac). Le serveur de jeu revalide tout (`parseAvatarConfig`) ; les anciennes configurations v1 sont converties à la lecture
+  (style de cheveux → tête, couleur de tenue → tenue), sans réécriture en base avant le prochain enregistrement.
+- Tête recomposée (`assemble.ts`) : crâne (peau, oreilles, nez) du « visage », cheveux, barbe, yeux et sourcils pris sur d'autres têtes par `splitHead`,
+  un maillage par tête source, chacun lié à son propre squelette. 22 visages, 19 coiffures, 8 barbes, 22 sources d'yeux.
+- Éditeur (`AvatarEditor.tsx`) : teint, visage, coiffure, couleur, barbe, yeux, haut, bas, un choix par emplacement d'accessoire ; aperçu 3D en direct.
+- Boutique : les tenues ne sont plus des couleurs mais des tenues complètes (`{"outfit": "Paladin" | "SpaceRanger" | "ToySoldier"}`), absentes de l'éditeur gratuit.
+  Casquette et lunettes de boutique prennent la place du chapeau et des lunettes choisis (`SHOP_ACCESSORY_PIECES`). Nœud papillon, couronne et effets ont été supprimés (migration, même fichier).
+- Migration `20261113100000_avatar_v2.sql` (appliquée sur le projet OneUP) : limite de taille de la configuration 400 → 1000 octets ; trois objets de boutique renommés avec leur nouvelle charge utile.
+- Tests : accord entre listes partagées et catalogue web (pièces, emplacements, rôles réellement présents dans les têtes), conversion v1, taille maximale, parcours profil et cosmétiques.
+
+Limites : les vêtements ne sont pas recolorables ; le choix de visage, coiffure, barbe et yeux se fait par listes de noms (pas de vignettes) ; certains visages ont des coiffures fusionnées avec des détails (ex. Lorekeeper).
+
+Retour au visage entier (décision du porteur, après relecture visuelle) :
+
+- La recomposition par pièces (crâne, coiffure, barbe, yeux, nez, oreilles, bouche greffée) laissait des vides gênants : dessus du crâne ouvert, bas du visage manquant sur les têtes à barbe,
+  jonctions visibles. Le visage se choisit désormais en un seul bloc : la tête d'origine d'un personnage, avec sa coiffure et sa barbe. Le format passe en v3 :
+  `{ v: 3, skin, hairColor, face, outfit, legs, acc[] }` (`acc` n'est pas proposé par l'éditeur pour le moment). Les v2 (visage recomposé) et v1 sont converties à la lecture
+  (v2 : le visage de base `skull` est gardé, coiffure et barbe choisies séparément sont perdues). Taille d'un avatar < 400 octets, donc sous la limite de la base.
+- `splitHead.ts` et `capHead.ts` (découpe des têtes, calotte du crâne, tests sur les 22 têtes) sont conservés tels quels mais `assemble.ts` ne les utilise plus : ils serviront si la recomposition revient.
+- Éditeur (`AvatarEditor.tsx`) : grilles de vignettes à choix unique (`role="radiogroup"` / `radio`) pour le visage (22), le haut (19) et le bas (19), plus les teintes de peau et de cheveux.
+  Vignettes statiques dans `apps/web/public/models/kaykit/thumbs/{faces,tops,bottoms}/` (192 px, 1,7 Mo), générées par la page `/dev/avatar-thumbs` :
+  `UPDATE_THUMBS=1 npx playwright test avatarThumbs` les réécrit. Elles montrent l'élément d'origine (couleurs d'origine), pas la peau ou les cheveux choisis.
+
+À venir : relecture visuelle de l'éditeur et des vignettes. Avant : étape 3 (moteur d'assemblage et animations, remplace `Avatar.tsx`),
+étape 4 (éditeur, nouveau format de configuration avec validation serveur et migration, boutique adaptée).
 
 ## Phases et dépendances
 

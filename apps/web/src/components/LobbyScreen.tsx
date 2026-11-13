@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import {
   CAPACITY_KEY,
   CHAT_MAX_LENGTH,
-  EMOTES,
   getGame,
   launchBlocker,
   parseSettings,
@@ -22,6 +21,7 @@ import { BlackjackScreen } from "@/blackjack/BlackjackScreen";
 import { MINI_ANCHOR, anchor } from "@/cartridge/anchors";
 import { playSfx } from "@/lib/audio";
 import { useBlocked } from "@/lib/blocked";
+import { useAvailableEmotes, useEconomy } from "@/lib/economy";
 import { useInputDevice } from "@/lib/input";
 import { connectLobby, describeJoinError } from "@/lib/lobby";
 import { useNav } from "@/lib/nav";
@@ -82,7 +82,10 @@ function useLobbyRoom(code: string) {
 
         on("chat", (m) => push({ fromId: m.fromId, name: m.name, text: m.text }));
         on("error", (m) => push({ text: m.message }));
-        on("rewards", setRewards);
+        on("rewards", (reward) => {
+          setRewards(reward);
+          void useEconomy.getState().refresh(); // le solde a changé
+        });
         on("notice", (m) => {
           switch (m.type) {
             case "hostChanged":
@@ -151,6 +154,7 @@ export function LobbyScreen({ code }: { code: string }) {
   const blocked = useBlocked((s) => s.ids);
   const toggleBlocked = useBlocked((s) => s.toggle);
   const device = useInputDevice();
+  const emotes = useAvailableEmotes();
 
   // Le fil de chat reste calé sur le dernier message.
   const feedList = useRef<HTMLUListElement>(null);
@@ -388,7 +392,7 @@ export function LobbyScreen({ code }: { code: string }) {
 
       <div className="rise-in fixed bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
         <div className="flex gap-2" role="group" aria-label="Emotes">
-          {EMOTES.map((emote, i) => (
+          {emotes.map((emote, i) => (
             <Button key={emote.id} className="!px-4 !py-1 !text-base" variant="plain" onClick={() => send("emote", { id: emote.id })}>
               {emote.label} <span className="text-xs text-ink/60">{i + 1}</span>
             </Button>
@@ -397,7 +401,7 @@ export function LobbyScreen({ code }: { code: string }) {
         <p className="rounded-full bg-white/80 px-3 py-0.5 text-xs font-bold text-ink/80">
           {device === "gamepad"
             ? "Manette : stick gauche pour bouger · boutons de façade pour les emotes"
-            : "Déplacement : ZQSD ou flèches · Emotes : touches 1 à 4"}
+            : "Déplacement : ZQSD ou flèches · Emotes : touches 1 à {emotes.length}"}
         </p>
       </div>
 

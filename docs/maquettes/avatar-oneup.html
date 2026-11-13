@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maquette de l'éditeur d'avatar OneUP</title>
+<!--
+  Maquette de référence validée (2026-11-13) : éditeur d'avatar devant le miroir de la chambre.
+  Panneaux flottants : catégories à gauche (Visage, Coiffure, Haut, Bas, Accessoires), options à droite,
+  couleurs de peau sous Visage et de cheveux sous Coiffure (dans le panneau d'options), Annuler / Valider en bas.
+  Aucun titre ni indicateur d'étape en haut : le même écran sert après l'inscription et depuis le miroir.
+  Les pièces sont des formes simples ; les vraies viennent du catalogue KayKit. Le reflet est simulé.
+  Autonome : ouvrir dans un navigateur (three.js chargé depuis cdnjs).
+-->
+<link href="https://fonts.googleapis.com/css2?family=Jersey+15&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#eeedf7;padding:24px;font-family:'Outfit',system-ui,sans-serif}
+.hint{font-size:13px;color:#6d6a8f;margin:0 0 8px}
+#ed{position:relative;width:680px;height:480px;border-radius:16px;overflow:hidden;background:#1c1840;font-family:'Outfit',sans-serif;color-scheme:light;user-select:none}
+#ed canvas{position:absolute;left:0;top:0;cursor:grab}
+#ed button,#ed span,#ed div{font-family:'Outfit',sans-serif}
+.w{position:absolute;background:#fff;color:#2a2750;border-radius:18px}
+.cat{display:block;width:100%;text-align:left;border:0;background:transparent;color:#000;font-weight:600;font-size:13px;padding:8px 12px;border-radius:11px;cursor:pointer}
+.cat.on{background:#6f5be0;color:#fff}
+.gr{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.ti{border:2px solid transparent;background:#f4f3fb;color:#000;border-radius:12px;padding:8px 6px;font-size:13px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ti.on{border-color:#6f5be0;background:#f1eeff}
+.ti i{width:22px;height:22px;border-radius:7px;border:2px solid #0f0d22;display:block}
+.sw{width:22px;height:22px;border-radius:50%;border:2.5px solid #fff;padding:0;cursor:pointer;box-shadow:0 0 0 1.5px #cfcbe8}
+.sw.on{box-shadow:0 0 0 2.5px #6f5be0}
+.bt{border:0;background:#6f5be0;color:#fff;font-weight:600;font-size:13px;padding:8px 0;border-radius:11px;cursor:pointer;width:128px}
+.bs{border:1.5px solid #cfcbe8;background:#fff;color:#000;font-weight:600;font-size:13px;padding:7px 0;border-radius:11px;cursor:pointer;width:128px}
+.lb{display:block;font-size:12px;font-weight:600;color:#000;margin-bottom:6px}
+.cs{display:flex;gap:6px}
+.sep{height:1px;background:#e9e7f5;margin:12px 0 10px}
+</style>
+</head>
+<body>
+<p class="hint">Glisse sur la scène pour faire tourner le personnage. Les couleurs de peau sont sous Visage, celles des cheveux sous Coiffure. Annuler revient à l'état d'ouverture.</p>
+<div id="ed"><canvas id="cv" width="680" height="480" style="width:680px;height:480px"></canvas>
+<div class="w" id="lp" style="left:14px;top:68px;width:128px;padding:6px"></div>
+<div class="w" id="rp" style="right:14px;top:68px;width:208px;padding:10px"><div id="rt" style="font-size:14px;font-weight:600;margin-bottom:8px;color:#000"></div><div class="gr" id="gr"></div><div id="cp"></div></div>
+<div class="w" id="ap" style="left:50%;transform:translateX(-50%);bottom:14px;padding:8px 10px;display:flex;align-items:center;gap:8px"><button class="bs" id="no">Annuler</button><button class="bt" id="ok">Valider</button></div>
+<div id="toast" class="w" style="left:50%;transform:translateX(-50%);top:200px;padding:12px 20px;font-weight:600;display:none;z-index:9;white-space:nowrap"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+var W=680,H=480,R=new THREE.WebGLRenderer({canvas:document.getElementById('cv'),antialias:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.setSize(W,H,false);R.setClearColor(0x1c1840,1);
+var S=new THREE.Scene(),C=new THREE.OrthographicCamera(-1,1,1,-1,-60,120),fh=3.7,asp=W/H;
+C.left=-fh*asp;C.right=fh*asp;C.top=fh;C.bottom=-fh;C.position.set(0,5.2,12);C.lookAt(0,2.3,0);C.updateProjectionMatrix();
+S.add(new THREE.AmbientLight(0xffffff,.8));var dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(3,6,6);S.add(dl);
+function mat(c,b){return b?new THREE.MeshBasicMaterial({color:c}):new THREE.MeshLambertMaterial({color:c,flatShading:true})}
+function mk(geo,c,o){var g=new THREE.Group();g.add(new THREE.Mesh(geo,mat(c)));if(o!==0){var l=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x0f0d22,side:THREE.BackSide}));l.scale.setScalar(1.08);g.add(l)}return g}
+function plain(w,h,d,c,x,y,z,b){var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(c,b));m.position.set(x,y,z);return m}
+for(var i=0;i<10;i++)for(var j=0;j<8;j++)S.add(plain(1,.3,1,(i+j)%2?0x4a4390:0x453f88,i-4.5,.15,j-3.6));
+S.add(plain(10,5.6,.3,0x6a62b8,0,3.1,-4.15));
+var fr=mk(new THREE.BoxGeometry(3.4,4.5,.2),0xffe08a);fr.position.set(0,2.75,-3.9);S.add(fr);
+S.add(plain(3,4.1,.22,0xcfeeff,0,2.75,-3.88,1));
+var avG=new THREE.Group(),refG=new THREE.Group();S.add(avG,refG);avG.position.set(0,.3,.2);
+var SK=[0xffe0c2,0xf1c27d,0xc68642,0x8d5524,0x5c3a21,0xffd6e1],HC=[0x5a3a1e,0x1d1b3a,0xd9a441,0xc4482f,0xe8e4ff,0x8a7be0];
+var CAT=[{k:'face',n:'Visage',o:['Rond','Carré','Ovale','Large'],col:'skin',cl:'Peau',cs:SK},{k:'hair',n:'Coiffure',o:['Aucune','Courte','Haute','Pointes','Longue','Barbe'],col:'hairC',cl:'Cheveux',cs:HC},{k:'top',n:'Haut',o:['T-shirt','Robe','Armure','Sweat'],c:[0xff9eb5,0x8fe3c0,0x9aa3b8,0x7ec8f5]},{k:'bot',n:'Bas',o:['Pantalon','Short','Jupe'],c:[0x3fa9f5,0x3fa9f5,0xcdb4f6]},{k:'acc',n:'Accessoires',o:['Casquette','Lunettes','Couronne','Cape','Sac'],multi:1,c:[0xff5a4d,0x1d1b3a,0xffd23f,0xc4482f,0xffd23f]}];
+var st={face:0,hair:1,top:0,bot:0,acc:{},skin:0,hairC:0},init=JSON.parse(JSON.stringify(st)),cur=0;
+function build(s,sc){var g=new THREE.Group(),sk=SK[s.skin],hc=HC[s.hairC],tc=CAT[2].c[s.top],bc=CAT[3].c[s.bot];
+function add(o,x,y,z){o.position.set(x,y,z);g.add(o);return o}
+var P=Math.PI*2;
+if(s.bot===0){add(mk(new THREE.BoxGeometry(.3,.75,.34),bc),-.17,.38,0);add(mk(new THREE.BoxGeometry(.3,.75,.34),bc),.17,.38,0)}
+else if(s.bot===1){add(mk(new THREE.BoxGeometry(.3,.4,.34),bc),-.17,.55,0);add(mk(new THREE.BoxGeometry(.3,.4,.34),bc),.17,.55,0);add(mk(new THREE.BoxGeometry(.26,.38,.3),sk),-.17,.19,0);add(mk(new THREE.BoxGeometry(.26,.38,.3),sk),.17,.19,0)}
+else{add(mk(new THREE.CylinderGeometry(.3,.6,.55,8),bc),0,.52,0);add(mk(new THREE.BoxGeometry(.26,.3,.3),sk),-.17,.15,0);add(mk(new THREE.BoxGeometry(.26,.3,.3),sk),.17,.15,0)}
+if(s.top===0){add(mk(new THREE.CylinderGeometry(.38,.42,.78,8),tc),0,1.12,0)}
+else if(s.top===1){add(mk(new THREE.CylinderGeometry(.32,.62,1.0,8),tc),0,.98,0)}
+else if(s.top===2){add(mk(new THREE.BoxGeometry(.9,.85,.55),tc),0,1.12,0);add(mk(new THREE.BoxGeometry(1.15,.22,.5),0x6b7285),0,1.5,0)}
+else{add(mk(new THREE.CylinderGeometry(.46,.5,.85,8),tc),0,1.1,0);add(mk(new THREE.SphereGeometry(.28,7,5),tc),0,1.52,-.3)}
+var ax=s.top===2?.62:.52;add(mk(new THREE.CylinderGeometry(.1,.1,.65,7),s.top===1?sk:tc),-ax,1.1,0);add(mk(new THREE.CylinderGeometry(.1,.1,.65,7),s.top===1?sk:tc),ax,1.1,0);
+var hy=1.82,hg=[new THREE.SphereGeometry(.4,10,8),new THREE.BoxGeometry(.66,.66,.66),new THREE.SphereGeometry(.4,10,8),new THREE.SphereGeometry(.4,10,8)][s.face];
+var head=mk(hg,sk);head.position.set(0,hy,0);if(s.face===2)head.scale.set(.88,1.18,.88);if(s.face===3)head.scale.set(1.22,.9,1);g.add(head);
+[-.14,.14].forEach(function(x){var e=new THREE.Mesh(new THREE.SphereGeometry(.05,6,4),mat(0x0f0d22,1));e.position.set(x,hy+.03,.36);g.add(e)});
+if(s.hair===1)add(mk(new THREE.SphereGeometry(.43,10,6,0,P,0,Math.PI/2),hc),0,hy+.04,0);
+if(s.hair===2){add(mk(new THREE.SphereGeometry(.43,10,6,0,P,0,Math.PI/2),hc),0,hy+.04,0);add(mk(new THREE.CylinderGeometry(.26,.3,.5,8),hc),0,hy+.5,0)}
+if(s.hair===3){[-.2,0,.2].forEach(function(x){add(mk(new THREE.ConeGeometry(.12,.42,5),hc),x,hy+.5,0)});add(mk(new THREE.SphereGeometry(.42,10,6,0,P,0,Math.PI/2.4),hc),0,hy+.03,0)}
+if(s.hair===4){add(mk(new THREE.SphereGeometry(.43,10,6,0,P,0,Math.PI/2),hc),0,hy+.04,0);add(mk(new THREE.BoxGeometry(.8,.95,.28),hc),0,hy-.3,-.28)}
+if(s.hair===5){add(mk(new THREE.BoxGeometry(.5,.26,.24),hc),0,hy-.28,.28)}
+if(s.acc[0]){add(mk(new THREE.CylinderGeometry(.44,.44,.2,10),0xff5a4d),0,hy+.34,0);add(mk(new THREE.BoxGeometry(.5,.05,.36),0xff5a4d),0,hy+.3,.45)}
+if(s.acc[1]){add(mk(new THREE.BoxGeometry(.24,.16,.06),0x1d1b3a,0),-.15,hy+.03,.4);add(mk(new THREE.BoxGeometry(.24,.16,.06),0x1d1b3a,0),.15,hy+.03,.4);add(mk(new THREE.BoxGeometry(.1,.04,.05),0x1d1b3a,0),0,hy+.05,.4)}
+if(s.acc[2])add(mk(new THREE.CylinderGeometry(.3,.4,.24,5),0xffd23f),0,hy+.55,0);
+if(s.acc[3])add(mk(new THREE.BoxGeometry(.9,1.1,.08),0xc4482f),0,1.05,-.42);
+if(s.acc[4])add(mk(new THREE.BoxGeometry(.36,.46,.24),0xffd23f),.42,.95,-.42);
+g.scale.setScalar(sc||1);return g}
+var yaw=Math.PI,drag=0,lx=0,auto=1;
+function rebuild(){[avG,refG].forEach(function(o){while(o.children.length)o.remove(o.children[0])});avG.add(build(st,1.55));refG.add(build(st,1.4));refG.position.set(0,1.0,-3.7)}
+var cv=document.getElementById('cv');cv.addEventListener('pointerdown',function(e){drag=1;lx=e.clientX;auto=0});window.addEventListener('pointerup',function(){drag=0});
+window.addEventListener('pointermove',function(e){if(drag){yaw+=(e.clientX-lx)*.012;lx=e.clientX}});
+var lp=document.getElementById('lp'),gr=document.getElementById('gr'),rt=document.getElementById('rt'),cp=document.getElementById('cp'),tt=document.getElementById('toast');
+function toast(m){tt.textContent=m;tt.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(function(){tt.style.display='none'},2200)}
+function hx(n){return '#'+('000000'+n.toString(16)).slice(-6)}
+function ui(){lp.innerHTML=CAT.map(function(c,i){return '<button class="cat'+(i===cur?' on':'')+'" data-c="'+i+'">'+c.n+'</button>'}).join('');
+var c=CAT[cur];rt.textContent=c.n;gr.innerHTML=c.o.map(function(n,i){var on=c.multi?st.acc[i]:st[c.k]===i,col=c.c?c.c[i]:(c.k==='hair'?HC[st.hairC]:SK[st.skin]);return '<button class="ti'+(on?' on':'')+'" data-o="'+i+'"><i style="background:'+hx(col)+'"></i>'+n+'</button>'}).join('');
+cp.innerHTML=c.col?'<div class="sep"></div><span class="lb">'+c.cl+'</span><div class="cs">'+c.cs.map(function(h,i){return '<button class="sw'+(st[c.col]===i?' on':'')+'" data-i="'+i+'" style="background:'+hx(h)+'" aria-label="couleur"></button>'}).join('')+'</div>':'';
+lp.querySelectorAll('[data-c]').forEach(function(b){b.onclick=function(){cur=+b.dataset.c;ui()}});
+gr.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var i=+b.dataset.o;if(c.multi)st.acc[i]=!st.acc[i];else st[c.k]=i;rebuild();ui()}});
+cp.querySelectorAll('[data-i]').forEach(function(b){b.onclick=function(){st[c.col]=+b.dataset.i;rebuild();ui()}})}
+document.getElementById('ok').onclick=function(){init=JSON.parse(JSON.stringify(st));toast('Personnage enregistré : direction la chambre.')};
+document.getElementById('no').onclick=function(){st=JSON.parse(JSON.stringify(init));rebuild();ui();toast('Modifications annulées.')};
+rebuild();ui();
+var t0=performance.now();(function tk(){requestAnimationFrame(tk);var t=(performance.now()-t0)/1000;if(auto)yaw=Math.PI+Math.sin(t*.6)*.35;
+avG.rotation.y=yaw;avG.position.y=.3+Math.sin(t*2)*.02;refG.rotation.y=Math.PI-yaw;R.render(S,C)})()})();
+</script>
+</body>
+</html>

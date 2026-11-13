@@ -7,13 +7,14 @@ import { APP_NAME, getGame } from "@stepup/shared";
 import { BIG_CARTRIDGE_CLASS, CENTER_ANCHOR, anchor } from "@/cartridge/anchors";
 import { useAudio } from "@/lib/audio";
 import { useNav } from "@/lib/nav";
+import { useEconomy } from "@/lib/economy";
 import { pingPresence } from "@/lib/social";
 import { logout, useSession } from "@/lib/session";
-import { AuthPanel } from "./AuthPanel";
 import { CartridgeBack } from "./CartridgeBack";
 import { CartridgeGrid } from "./CartridgeGrid";
 import { HomePanels } from "./HomePanels";
 import { LobbyScreen } from "./LobbyScreen";
+import { LoginScreen } from "./LoginScreen";
 import { AvatarInvite } from "./profile/AvatarInvite";
 import { ProfileScreen } from "./profile/ProfileScreen";
 import { Badge, Button } from "./ui";
@@ -42,6 +43,13 @@ export function StepUpApp() {
 
   const signedIn = session.loaded && session.name !== null;
   const audio = useAudio();
+  const balance = useEconomy((s) => s.balance);
+
+  // Solde et objets du compte : chargés à la connexion, vidés à la déconnexion.
+  useEffect(() => {
+    if (session.userId) void useEconomy.getState().refresh(session.userId);
+    else useEconomy.getState().reset();
+  }, [session.userId]);
 
   // Un compte signale régulièrement qu'il est en ligne (les amis le voient selon ses réglages de confidentialité).
   useEffect(() => {
@@ -50,6 +58,9 @@ export function StepUpApp() {
     const timer = setInterval(pingPresence, PRESENCE_PING_SECONDS * 1000);
     return () => clearInterval(timer);
   }, [session.kind]);
+
+  // Pas connecté : écran de connexion plein écran, sans l'en-tête de l'application.
+  if (session.loaded && !session.name) return <LoginScreen />;
 
   return (
     <>
@@ -81,6 +92,7 @@ export function StepUpApp() {
             <div className="flex items-center gap-3">
               <span className="font-bold">{session.name}</span>
               <Badge className={session.kind === "guest" ? "bg-sun" : "bg-turquoise"}>{session.kind === "guest" ? "Invité" : "Compte"}</Badge>
+              {session.kind === "user" && balance !== null && <Badge className="bg-sun">{balance} jetons</Badge>}
               {session.kind === "user" && view !== "lobby" && view !== "profile" && (
                 <Button variant="calm" onClick={() => useNav.getState().openProfile()}>
                   Mon profil
@@ -97,8 +109,6 @@ export function StepUpApp() {
 
         {!session.loaded ? (
           <p aria-busy="true">Chargement…</p>
-        ) : !session.name ? (
-          <AuthPanel />
         ) : view === "lobby" && code ? (
           <LobbyScreen key={code} code={code} />
         ) : view === "profile" ? (

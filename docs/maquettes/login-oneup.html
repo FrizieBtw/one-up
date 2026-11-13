@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maquette de l'écran de connexion OneUP</title>
+<!--
+  Maquette de référence validée (2026-11-13) : carte blanche centrée sur fond 3D pastel avec objets flottants (sans parallaxe).
+  Connexion par pseudo ou e-mail + mot de passe, création de compte avec pseudo unique, Google, Discord, invité.
+  Les pastilles Google et Discord sont génériques : utiliser les vrais logos selon leurs règles de marque.
+  Autonome : ouvrir dans un navigateur (three.js chargé depuis cdnjs).
+-->
+<link href="https://fonts.googleapis.com/css2?family=Jersey+15&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#eeedf7;padding:24px;font-family:'Outfit',system-ui,sans-serif}
+.hint{font-size:13px;color:#6d6a8f;margin:0 0 8px}
+#lg{position:relative;width:680px;height:500px;border-radius:16px;overflow:hidden;background:#1c1840;font-family:'Outfit',sans-serif;color-scheme:light}
+#lg canvas{position:absolute;left:0;top:0}
+#cd{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:300px;background:#fff;color:#2a2750;border-radius:22px;padding:20px 22px;color-scheme:light}
+#cd button{font-family:'Outfit',sans-serif}
+.lo{font-family:'Jersey 15',sans-serif;font-size:34px;line-height:1;text-align:center;margin-bottom:12px}.lo u{text-decoration:none;color:#6f5be0}
+.tb2{display:flex;background:#f1eeff;border-radius:999px;padding:3px;margin-bottom:12px}
+.tb2 button{flex:1;border:0;background:transparent;color:#000;font-weight:600;font-size:13px;padding:6px 0;border-radius:999px;cursor:pointer}
+.tb2 button.on{background:#6f5be0;color:#fff}
+.fl{margin-bottom:8px}.fl label{display:block;font-size:12px;font-weight:600;margin-bottom:3px;color:#2a2750}
+#cd .fl input{width:100%;box-sizing:border-box;height:38px;border:1.5px solid #cfcbe8;background:#f7f6fd;border-radius:11px;padding:0 12px;font:inherit;font-size:14px;color:#2a2750;caret-color:#6f5be0;outline:0}
+#cd .fl input::placeholder{color:#9a97bd}
+#cd .fl input:focus{border-color:#6f5be0;background:#fff}
+#cd .fl.bad input{border-color:#e0364f}#cd .fl.ok input{border-color:#2fa56f}
+.hn{font-size:11.5px;min-height:15px;margin-top:3px;color:#7a77a0}.bad .hn{color:#c4243b}.ok .hn{color:#1f8a58}
+.pw{position:relative}.pw span{position:absolute;right:10px;top:10px;font-size:12px;color:#6f5be0;font-weight:600;cursor:pointer}
+.pr{width:100%;border:0;background:#6f5be0;color:#fff;font-weight:600;font-size:14px;height:40px;border-radius:12px;cursor:pointer;margin-top:4px}
+.sp{display:flex;align-items:center;gap:8px;font-size:12px;color:#9a97bd;margin:10px 0}.sp:before,.sp:after{content:'';flex:1;height:1px;background:#e9e7f5}
+.oa{display:flex;gap:8px}
+.gg{flex:1;border:1.5px solid #cfcbe8;background:#fff;color:#2a2750;font-weight:500;font-size:13.5px;height:38px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.gd{flex:1;border:0;background:#5865f2;color:#fff;font-weight:500;font-size:13.5px;height:38px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.gv{width:16px;height:16px;border-radius:50%;background:conic-gradient(#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0)}
+.dv{width:18px;height:14px;border-radius:7px 7px 6px 6px;background:#fff;position:relative}.dv:before,.dv:after{content:'';position:absolute;top:5px;width:3px;height:4px;border-radius:2px;background:#5865f2}.dv:before{left:4px}.dv:after{right:4px}
+.gu{text-align:center;margin-top:10px;font-size:13px;color:#2a2750}.gu a{color:#6f5be0;font-weight:600;cursor:pointer}
+.ms{font-size:12px;text-align:center;padding:7px 10px;border-radius:10px;margin-bottom:8px}.ms.e{background:#ffe9ec;color:#c4243b}.ms.s{background:#e3f6ec;color:#1f8a58}
+.fo{text-align:right;font-size:11.5px;margin:-2px 0 6px}.fo a{color:#6f5be0;font-weight:500;cursor:pointer}
+</style>
+</head>
+<body>
+<p class="hint">Essaie : pseudo « Max » (déjà pris), mot de passe trop court, connexion avec Léa / azerty123, ou « Jouer en invité ».</p>
+<div id="lg"><canvas id="cv" width="680" height="500" style="width:680px;height:500px"></canvas><div id="cd"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+var W=680,H=500,R=new THREE.WebGLRenderer({canvas:document.getElementById('cv'),antialias:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.setSize(W,H,false);R.setClearColor(0x1c1840,1);
+var S=new THREE.Scene(),C=new THREE.OrthographicCamera(0,W,H,0,-600,600);C.position.z=300;
+S.add(new THREE.AmbientLight(0xffffff,.8));var dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(-1,2,3);S.add(dl);
+function mk(g,c){var o=new THREE.Group();o.add(new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:c,flatShading:true})));var l=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0x0f0d22,side:THREE.BackSide}));l.scale.setScalar(1.09);o.add(l);return o}
+var it=[];function add(m,x,y,s,sp){m.scale.setScalar(s);S.add(m);it.push({m:m,x:x,y:y,sp:sp,ph:Math.random()*6})}
+add(mk(new THREE.BoxGeometry(1,1,1),0xff9eb5),70,90,48,.7);
+var coin=mk(new THREE.CylinderGeometry(.5,.5,.2,18),0xffe08a);coin.children.forEach(function(c){c.rotation.x=Math.PI/2});add(coin,610,80,44,1.1);
+add(mk(new THREE.BoxGeometry(.7,1,.08),0xffffff),50,260,64,.6);
+add(mk(new THREE.OctahedronGeometry(.6),0xcdb4f6),630,230,48,.9);
+add(mk(new THREE.BoxGeometry(1,.85,.35),0xff5a4d),90,430,56,.8);
+add(mk(new THREE.IcosahedronGeometry(.5,0),0x8fe3c0),600,420,46,.7);
+add(mk(new THREE.BoxGeometry(1,1,1),0x7ec8f5),180,40,30,1);
+add(mk(new THREE.SphereGeometry(.5,7,5),0xffd23f),520,465,34,.8);
+var t0=performance.now();
+(function tk(){requestAnimationFrame(tk);var t=(performance.now()-t0)/1000;it.forEach(function(d){d.m.position.set(d.x,H-d.y-Math.sin(t*d.sp+d.ph)*7,0);d.m.rotation.y=t*d.sp*.7+d.ph;d.m.rotation.x=.5+Math.sin(t*.5+d.ph)*.25});R.render(S,C)})();
+var cd=document.getElementById('cd'),mode='in',msg='',guest=false,taken=['max','lea','sam'];
+function pseudoState(v){if(!v)return['','Entre 3 et 16 caractères : lettres, chiffres, _'];if(!/^[A-Za-z0-9_]{3,16}$/.test(v))return['bad','3 à 16 caractères, sans espaces ni accents.'];if(taken.indexOf(v.toLowerCase())>-1)return['bad','Ce pseudo est déjà pris.'];return['ok','Pseudo disponible.']}
+function render(){var h='<div class="lo">One<u>UP</u></div>';
+if(guest){h+='<div style="font-size:15px;font-weight:600;margin-bottom:4px">Jouer en invité</div><div style="font-size:12px;color:#7a77a0;margin-bottom:10px">Pas de jetons ni de boutique. Ta progression ne sera pas sauvegardée.</div><div class="fl" id="fg"><label>Pseudo</label><input id="g1" placeholder="Pixel_Pat" maxlength="16" autocomplete="off"><div class="hn" id="gh">Entre 3 et 16 caractères : lettres, chiffres, _</div></div><button class="pr" id="go">Entrer dans la chambre</button><div class="gu"><a id="back">Retour</a></div>'}
+else{h+='<div class="tb2"><button data-m="in" class="'+(mode==='in'?'on':'')+'">Connexion</button><button data-m="up" class="'+(mode==='up'?'on':'')+'">Créer un compte</button></div>';
+if(msg)h+='<div class="ms '+msg[0]+'">'+msg[1]+'</div>';
+if(mode==='in'){h+='<div class="fl"><label>Pseudo ou e-mail</label><input id="a1" autocomplete="off"></div><div class="fl"><label>Mot de passe</label><div class="pw"><input id="a2" type="password"><span id="sh">Afficher</span></div></div><div class="fo"><a>Mot de passe oublié ?</a></div><button class="pr" id="go">Se connecter</button>'}
+else{h+='<div class="fl" id="fp"><label>Pseudo</label><input id="u1" maxlength="16" autocomplete="off"><div class="hn" id="uh">Entre 3 et 16 caractères : lettres, chiffres, _</div></div><div class="fl"><label>Adresse e-mail</label><input id="u2" type="email"></div><div class="fl" id="fw"><label>Mot de passe</label><div class="pw"><input id="u3" type="password"><span id="sh">Afficher</span></div><div class="hn" id="wh">8 caractères minimum.</div></div><button class="pr" id="go">Créer mon compte</button>'}
+h+='<div class="sp">ou continuer avec</div><div class="oa"><button class="gg"><span class="gv"></span>Google</button><button class="gd"><span class="dv"></span>Discord</button></div><div class="gu">Pas envie de t\'inscrire ? <a id="gs">Jouer en invité</a></div>'}
+cd.innerHTML=h;bind()}
+function $(i){return document.getElementById(i)}
+function bind(){cd.querySelectorAll('[data-m]').forEach(function(b){b.onclick=function(){mode=b.dataset.m;msg='';render()}});
+var sh=$('sh');if(sh)sh.onclick=function(){var i=cd.querySelector('.pw input');i.type=i.type==='password'?'text':'password';sh.textContent=i.type==='password'?'Afficher':'Masquer'};
+if($('gs'))$('gs').onclick=function(){guest=true;msg='';render()};if($('back'))$('back').onclick=function(){guest=false;render()};
+if($('g1'))$('g1').oninput=function(){var s=pseudoState(this.value);$('fg').className='fl '+s[0];$('gh').textContent=s[1]};
+if($('u1'))$('u1').oninput=function(){var s=pseudoState(this.value);$('fp').className='fl '+s[0];$('uh').textContent=s[1]};
+if($('u3'))$('u3').oninput=function(){var ok=this.value.length>=8;$('fw').className='fl '+(this.value?(ok?'ok':'bad'):'');$('wh').textContent=ok?'Mot de passe valide.':'8 caractères minimum.'};
+$('go').onclick=function(){
+if(guest){var s=pseudoState($('g1').value);if(s[0]!=='ok'){$('fg').className='fl bad';$('gh').textContent=s[0]===''?'Choisis un pseudo.':s[1];return}guest=false;msg=['s','Invité « '+$('g1').value+' » : direction la chambre.'];mode='in';render();return}
+if(mode==='in'){var a=$('a1').value.trim().toLowerCase(),b=$('a2').value;if(a==='lea'&&b==='azerty123'){msg=['s','Bienvenue Léa : direction la chambre.']}else{msg=['e','Pseudo, e-mail ou mot de passe incorrect.']}render();return}
+var s=pseudoState($('u1').value);var pwOk=$('u3').value.length>=8,em=/\S+@\S+\.\S+/.test($('u2').value);
+if(s[0]!=='ok'){$('fp').className='fl bad';$('uh').textContent=s[0]===''?'Choisis un pseudo.':s[1];return}
+if(!em){msg=['e','Entre une adresse e-mail valide.'];var v=[$('u1').value,$('u3').value];render();$('u1').value=v[0];$('u1').oninput();return}
+if(!pwOk){$('fw').className='fl bad';return}
+msg=['s','Compte créé : direction l\'éditeur d\'avatar.'];mode='in';render()}}
+render()})();
+</script>
+</body>
+</html>

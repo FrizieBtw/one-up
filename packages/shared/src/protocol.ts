@@ -78,7 +78,7 @@ export interface ServerMessages {
     | { type: "launchCancelled" };
   emote: { sessionId: string; id: EmoteId };
   /** Récompenses de fin de session, envoyées une fois les résultats enregistrés (comptes uniquement). */
-  rewards: { xpGained: number; xp: number; achievements: string[] };
+  rewards: { xpGained: number; xp: number; achievements: string[]; tokens: number; balance: number; missions: string[] };
   error: { code: "RATE_LIMITED" | "INVALID" | "FORBIDDEN"; message: string };
 }
 
@@ -95,6 +95,8 @@ export interface LobbyPlayerSnapshot {
   connected: boolean;
   /** JSON d'AvatarConfig validée, ou chaîne vide (invité, ou avatar jamais personnalisé). */
   avatar: string;
+  /** JSON d'AvatarCosmetics : objets de boutique équipés (tenue premium, accessoire, effet), ou « {} ». */
+  cosmetics: string;
   /** Position dans la salle (autorité serveur) et direction de déplacement courante. */
   x: number;
   z: number;

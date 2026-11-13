@@ -1,10 +1,13 @@
+import { guestLogin } from "./helpers/guestLogin";
+import { noAvatarModels } from "./helpers/noAvatarModels";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 async function player(browser: Browser, name: string, path = "/"): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
+  const context = await browser.newContext();
+  await noAvatarModels(context);
+  const page = await context.newPage();
   await page.goto(path);
-  await page.getByLabel("Pseudo").first().fill(name);
-  await page.getByRole("button", { name: "Entrer" }).click();
+  await guestLogin(page, name);
   return page;
 }
 
@@ -59,7 +62,7 @@ test("cartouche → création, jointure par code, réglages, lien de partage, d�
   await alice.getByRole("button", { name: "Règles de la partie : ouvrir la cartouche" }).click();
   const rules = alice.getByRole("dialog", { name: "Règles de la partie" });
   await rules.getByLabel("Nombre de tours").selectOption("5");
-  await expect(bob.getByRole("status").filter({ hasText: "Règle modifiée : Nombre de tours." })).toBeVisible();
+  await expect(bob.getByRole("listitem").filter({ hasText: "Règle modifiée : Nombre de tours." })).toBeVisible();
   await expect(bob.getByRole("button", { name: "Annuler prêt" })).toBeVisible();
   await alice.waitForTimeout(1200);
   await alice.screenshot({ path: "test-results/3-regles.png" });
@@ -79,7 +82,7 @@ test("cartouche → création, jointure par code, réglages, lien de partage, d�
   await expect(bob.getByRole("button", { name: "Contre (1)" })).toBeVisible();
   await alice.screenshot({ path: "test-results/4-proposition.png" });
   await alice.getByRole("button", { name: "Valider" }).click();
-  await expect(bob.getByRole("status").filter({ hasText: "Proposition validée : Nombre de tours." })).toBeVisible();
+  await expect(bob.getByRole("listitem").filter({ hasText: "Proposition validée : Nombre de tours." })).toBeVisible();
   await expect(alice.getByText("Bob propose : Nombre de tours → 7")).toHaveCount(0);
   await alice.getByRole("button", { name: "Règles de la partie : ouvrir la cartouche" }).click();
   await expect(rules.getByLabel("Nombre de tours")).toHaveValue("7");
@@ -129,5 +132,5 @@ test("cartouche → création, jointure par code, réglages, lien de partage, d�
   await alice.goBack();
   await expect(alice.getByRole("button", { name: "Kart Rush : ouvrir la cartouche" })).toBeVisible();
   await expect(bob.getByText("Joueurs 2/8")).toBeVisible();
-  await expect(bob.getByRole("status").filter({ hasText: "Bob est maintenant l'hôte." })).toBeVisible();
+  await expect(bob.getByRole("listitem").filter({ hasText: "Bob est maintenant l'hôte." })).toBeVisible();
 });

@@ -23,13 +23,18 @@ export const LOBBY_TICK_MS = 50;
 /** Distance au centre à laquelle les joueurs apparaissent. */
 export const LOBBY_SPAWN_RADIUS = 2;
 
+/** `item` : objet de boutique qui débloque l'emote (sans `item`, elle est gratuite). */
 export const EMOTES = [
   { id: "wave", label: "Salut" },
   { id: "dance", label: "Danse" },
   { id: "cheer", label: "Bravo" },
   { id: "laugh", label: "Rire" },
+  { id: "spin", label: "Toupie", item: "emote_spin" },
+  { id: "bow", label: "Révérence", item: "emote_bow" },
 ] as const;
 export type EmoteId = (typeof EMOTES)[number]["id"];
+/** Emotes gratuites, utilisables par tous (invités compris). */
+export const FREE_EMOTE_IDS: readonly string[] = EMOTES.filter((e) => !("item" in e)).map((e) => e.id);
 export const EMOTE_IDS = EMOTES.map((e) => e.id) as [EmoteId, ...EmoteId[]];
 export const EMOTE_DURATION_MS = 2500;
 export const EMOTE_RATE = { max: 2, windowMs: 3000 };

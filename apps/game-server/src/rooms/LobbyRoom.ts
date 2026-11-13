@@ -6,6 +6,7 @@ import {
   CAPACITY_KEY,
   CHAT_RATE,
   EMOTE_RATE,
+  FREE_EMOTE_IDS,
   HOST_GRACE_SECONDS,
   JoinError,
   LAUNCH_COUNTDOWN_SECONDS,
@@ -33,7 +34,7 @@ import {
 } from "@stepup/shared";
 import { verifyToken } from "../auth";
 import { BlackjackGame, BlackjackState, tuning } from "../games/blackjack";
-import { fetchAvatar, recordMatch } from "../persistence";
+import { fetchAvatar, fetchCosmetics, recordMatch } from "../persistence";
 import { presence } from "../presence";
 import { createRateLimiter } from "../rateLimit";
 
@@ -45,6 +46,7 @@ export const Player = schema(
     ready: t.boolean(),
     connected: t.boolean(),
     avatar: t.string().default(""),
+    cosmetics: t.string().default("{}"),
     x: t.float32(),
     z: t.float32(),
     dx: t.float32(),
@@ -85,6 +87,13 @@ export const LobbyState = schema(
 );
 export type LobbyState = SchemaType<typeof LobbyState>;
 
+/** Ce que `onAuth` transmet à `onJoin` : identité et apparence lues en base (vides pour un invité). */
+interface JoinAuth extends Identity {
+  avatar: string;
+  cosmetics: string;
+  ownedEmotes: string[];
+}
+
 export interface LobbyMetadata {
   gameId: string;
   isPublic: boolean;
@@ -109,6 +118,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
   /** Votes par proposition : identité du votant → pour (true) ou contre (false). */
   private votes = new Map<string, Map<string, boolean>>();
   private nextProposalId = 1;
+  /** Emotes de boutique possédées, par session. Côté serveur seulement : jamais synchronisé. */
+  private ownedEmotes = new Map<string, Set<string>>();
   private launchTimer: Delayed | null = null;
   private blackjack: BlackjackGame | null = null;
   private chatAllowed = createRateLimiter(CHAT_RATE.max, CHAT_RATE.windowMs);
@@ -149,6 +160,10 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
 
     this.onMessage("emote", clientMessages.emote, (client, { id }) => {
       if (!this.state.players.has(client.sessionId)) return;
+      // Les emotes de boutique ne sont utilisables que par leur propriétaire : le client ne s'en attribue aucune.
+      if (!FREE_EMOTE_IDS.includes(id) && !this.ownedEmotes.get(client.sessionId)?.has(id)) {
+        return this.refuse(client, "FORBIDDEN", "Cette emote n'est pas débloquée.");
+      }
       if (!this.emoteAllowed(client.sessionId)) return; // silencieux : simple anti-spam visuel
       this.announce("emote", { sessionId: client.sessionId, id });
     });
@@ -255,16 +270,19 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     });
   }
 
-  async onAuth(_client: Client, _options: unknown, context: AuthContext): Promise<Identity & { avatar: string }> {
+  async onAuth(_client: Client, _options: unknown, context: AuthContext): Promise<JoinAuth> {
     const identity = await verifyToken(context.token);
     if (!identity) throw new ServerError(401, JoinError.Unauthorized);
     // Pas de spectateurs : on n'entre plus une fois le lancement engagé.
     if (this.state.phase !== "waiting") throw new ServerError(403, JoinError.InProgress);
-    // Seuls les comptes ont un avatar enregistré ; les invités reçoivent un avatar par défaut côté client.
-    return { ...identity, avatar: identity.kind === "user" ? await fetchAvatar(identity.id) : "" };
+    // Seuls les comptes ont un avatar et des objets de boutique ; les invités reçoivent l'apparence par défaut côté client.
+    if (identity.kind !== "user") return { ...identity, avatar: "", cosmetics: "{}", ownedEmotes: [] };
+    const [avatar, shop] = await Promise.all([fetchAvatar(identity.id), fetchCosmetics(identity.id)]);
+    return { ...identity, avatar, cosmetics: shop.cosmetics, ownedEmotes: shop.ownedEmotes };
   }
 
-  onJoin(client: Client, _options: unknown, identity: Identity & { avatar: string }) {
+  onJoin(client: Client, _options: unknown, identity: JoinAuth) {
+    this.ownedEmotes.set(client.sessionId, new Set(identity.ownedEmotes));
     // Une identité = un seul siège. Un siège déconnecté est remplacé, un siège actif bloque le doublon.
     for (const [sessionId, existing] of this.state.players) {
       if (existing.id !== identity.id) continue;
@@ -283,6 +301,7 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
         ready: false,
         connected: true,
         avatar: identity.avatar,
+        cosmetics: identity.cosmetics,
         x: Math.cos(angle) * LOBBY_SPAWN_RADIUS,
         z: Math.sin(angle) * LOBBY_SPAWN_RADIUS,
         dx: 0,
@@ -315,6 +334,7 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
 
   onLeave(client: Client) {
     this.seats.delete(client.sessionId);
+    this.ownedEmotes.delete(client.sessionId);
     const leaving = this.state.players.get(client.sessionId);
     if (leaving?.kind === "user") presence.clearRoom(leaving.id);
     this.state.players.delete(client.sessionId);
@@ -400,7 +420,14 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     for (const reward of rewards) {
       const sessionId = [...this.state.players].find(([, player]) => player.id === reward.userId)?.[0];
       const client = sessionId ? this.clients.getById(sessionId) : undefined;
-      client?.send("rewards", { xpGained: reward.xpGained, xp: reward.xp, achievements: reward.achievements } satisfies ServerMessages["rewards"]);
+      client?.send("rewards", {
+        xpGained: reward.xpGained,
+        xp: reward.xp,
+        achievements: reward.achievements,
+        tokens: reward.tokensGained,
+        balance: reward.balance,
+        missions: reward.missions,
+      } satisfies ServerMessages["rewards"]);
     }
   }
 

@@ -4,6 +4,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { ExtrudeGeometry, MathUtils, Shape, type Group } from "three";
 import { GAMES, type GameDefinition } from "@stepup/shared";
+import { equippedPayload, useEconomy } from "@/lib/economy";
 import { useNav } from "@/lib/nav";
 import { CENTER_ANCHOR, CONSOLE_ANCHOR, MINI_ANCHOR, PORT_ABOVE_ANCHOR, PORT_IN_ANCHOR, anchorRect, cellAnchor } from "./anchors";
 import { LABEL_ASPECT, cartridgeArt, createLabelTexture } from "./art";
@@ -38,6 +39,8 @@ function Cartridge({ game, index, geometry, reducedMotion }: { game: GameDefinit
   const group = useRef<Group>(null!);
   const motion = useRef({ anchorId: "", travelling: false, placed: false });
   const art = cartridgeArt(game.id);
+  // Fini de cartouche équipé en boutique (couleur et métal), appliqué à toutes les cartouches de ce joueur.
+  const finish = useEconomy((s) => equippedPayload(s, "cartridge"));
   const label = useMemo(() => createLabelTexture(game), [game]);
   useEffect(() => () => label.dispose(), [label]);
 
@@ -106,7 +109,7 @@ function Cartridge({ game, index, geometry, reducedMotion }: { game: GameDefinit
   return (
     <group ref={group} scale={0}>
       <mesh geometry={geometry}>
-        <meshStandardMaterial color={art.body} roughness={0.42} metalness={0.05} />
+        <meshStandardMaterial color={typeof finish?.body === "string" ? finish.body : art.body} roughness={0.42} metalness={typeof finish?.metalness === "number" ? finish.metalness : 0.05} />
       </mesh>
       {/* Face avant : étiquette illustrée et stries de préhension */}
       <mesh position={[0, -0.17, FACE_Z]}>

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maquette de la chambre OneUP</title>
+<!--
+  Maquette de référence validée (2026-11-13) : chambre isométrique en diagonale, HUD blanc plat arrondi,
+  palette Nuit douce, Jersey 15/25 pour les titres et hologrammes, Outfit pour le HUD 2D.
+  Icônes : voir la mémoire du projet (direction-design-oneup) et le dossier d'assets one-up-assets.
+  Autonome : ouvrir dans un navigateur (three.js chargé depuis cdnjs).
+-->
+<link href="https://fonts.googleapis.com/css2?family=Jersey+15&family=Jersey+25&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#eeedf7;font-family:'Outfit',system-ui,sans-serif;padding:24px}
+@keyframes fo{0%{opacity:0;transform:translateY(6px)}8%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.hb{font-family:'Jersey 15',sans-serif;font-size:20px;background:#ffe08a;color:#3a2a00;border:3px solid #0f0d22;border-bottom-width:6px;border-radius:12px;padding:0 14px;cursor:pointer;display:block;width:100%;margin:4px 0}
+.w{background:#fff;color:#2a2750;font-family:'Outfit',sans-serif;border-radius:18px}
+#tabs .tb{font-family:'Outfit',sans-serif;font-weight:600;font-size:13px;border:0;border-radius:999px;background:transparent;color:#000;padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:6px;line-height:1.2}
+#tabs .tb svg{fill:#000}
+#tabs .tb.on{background:#6f5be0;color:#fff}
+#tabs .tb.on svg{fill:#fff}
+#quit{font-family:'Outfit',sans-serif;font-weight:600;font-size:14px;background:#ffe9ec;color:#c4243b;border:0;border-radius:12px;padding:8px 0;width:100%;margin-top:10px;cursor:pointer;line-height:1.2}
+.k{width:1.3em;height:1.3em;fill:currentColor;flex:none;vertical-align:middle}
+.it{background:#f4f3fb;border-radius:14px;padding:10px;font-size:14px;color:#2a2750}
+.sw{height:48px;border-radius:10px;margin-bottom:8px}
+.tg{display:flex;justify-content:space-between;align-items:center;padding:12px 2px;border-bottom:1px solid #eceaf6;font-size:15px}
+.sl{width:38px;height:22px;border-radius:12px;background:#6f5be0;position:relative}.sl:after{content:'';position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff}
+.ir{display:flex;align-items:center;gap:8px}.ir .k{color:#6f5be0;font-size:15px}
+.bar{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap;align-items:center}.bar span{font-size:13px;color:#6d6a8f}
+.bar button{font:inherit;font-size:13px;padding:6px 12px;border-radius:10px;border:1px solid #c9c5e6;background:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="bar">
+<button id="v1">Je suis Léa (hôte)</button><button id="v2">Je suis Max (invité)</button>
+<span>Le bouton Quitter n'apparaît que pour l'invité. Clique le sol pour te déplacer, va sur la console ou le miroir.</span></div>
+<div id="st" style="position:relative;width:680px;height:440px;box-sizing:border-box;background:#1c1840;border-radius:16px;overflow:hidden">
+<canvas id="cv" style="position:absolute;left:0;top:0;width:680px;height:440px"></canvas>
+<div class="w" style="position:absolute;z-index:8;left:14px;top:14px;padding:6px 16px 6px 8px;display:flex;align-items:center;gap:8px"><div style="width:30px;height:30px;background:#ffe08a;border-radius:9px"></div><span style="font-family:'Jersey 15',sans-serif;font-size:30px;line-height:1.1">One<span style="color:#6f5be0">UP</span></span></div>
+<div class="w" id="tabs" style="position:absolute;z-index:8;left:50%;transform:translateX(-50%);top:14px;padding:3px;display:flex;gap:2px;border-radius:999px"><button class="tb on" data-t="room"><i data-k="door"></i>Chambre</button><button class="tb" data-t="shop"><i data-k="shop"></i>Boutique</button><button class="tb" data-t="set"><i data-k="settings"></i>Paramètres</button></div>
+<div class="w" style="position:absolute;z-index:8;right:14px;top:14px;padding:6px 14px 6px 6px;display:flex;align-items:center;gap:10px">
+<div id="av" style="width:46px;height:46px;border-radius:50%;background:#ffd6e1;overflow:hidden;position:relative;flex:none"><div style="position:absolute;left:12px;top:8px;width:21px;height:21px;border-radius:50%;background:#ffe0c2"></div><div id="avb" style="position:absolute;left:4px;top:32px;width:37px;height:30px;border-radius:50%;background:#7ec8f5"></div></div>
+<div><div style="font-size:15px;font-weight:600;line-height:1.2"><span id="pn">Léa</span> <span id="pl" style="font-size:12px;font-weight:500;color:#6f5be0;background:#eceaff;border-radius:8px;padding:1px 7px;margin-left:4px">Niv. 7</span></div>
+<div style="display:flex;align-items:center;gap:5px;margin-top:3px;color:#e0a100"><i data-k="tokens"></i><span id="pc" style="font-size:14px;font-weight:500;line-height:1;color:#2a2750">1 250</span></div></div></div>
+<div style="position:absolute;z-index:8;left:14px;bottom:14px;width:250px"><div id="chat" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px"></div>
+<div class="w" style="padding:10px 16px;font-size:14px;color:#9a97bd;border-radius:999px">Écrire un message…</div></div>
+<div class="w" style="position:absolute;z-index:8;right:14px;bottom:14px;width:214px;padding:12px 16px;font-size:14px;line-height:1.9">
+<div style="font-size:15px;font-weight:600;margin-bottom:2px">Chambre de Léa</div>
+<div class="ir"><i data-k="users"></i>2 / 4 joueurs</div>
+<div class="ir" id="priv"><span id="pi"><i data-k="lock"></i></span><span id="pt">Privée</span></div>
+<div class="ir"><i data-k="qr"></i>KX7P</div>
+<div class="ir"><i data-k="pad"></i>Blackjack Battle</div>
+<button id="quit" style="display:none">Quitter la chambre</button></div>
+<div id="ov" class="w" style="position:absolute;z-index:7;left:14px;right:14px;top:72px;bottom:14px;display:none;padding:18px 22px;overflow:hidden"></div>
+<div id="hc" style="position:absolute;z-index:6;display:none;width:190px;margin-left:-95px;margin-top:-100px"><div style="animation:fl 2.4s ease-in-out infinite;background:rgba(143,227,192,.18);border:2px dashed #8fe3c0;border-radius:12px;padding:8px 10px;color:#8fe3c0;font-family:'Jersey 25',sans-serif;font-size:15px;text-align:center">Console<button class="hb" style="background:#8fe3c0;color:#0f3a26">Lancer une partie</button><button class="hb" style="background:#b9a3f5;color:#1f1147">Rejoindre un groupe</button></div></div>
+<div id="hm" style="position:absolute;z-index:6;display:none;width:190px;margin-left:-95px;margin-top:-60px"><div style="animation:fl 2.4s ease-in-out infinite;background:rgba(185,163,245,.2);border:2px dashed #b9a3f5;border-radius:12px;padding:8px 10px;color:#d9ccff;font-family:'Jersey 25',sans-serif;font-size:15px;text-align:center">Miroir<button class="hb" style="background:#ff9eb5;color:#4a1428">Personnaliser mon avatar</button></div></div>
+</div>
+<script>
+(function(){
+var P={
+door:['1.96 1.97 6.13 6.13','M4.766 2.048c.34-.187.803-.039 1.729.26.404.13.606.196.734.344q.04.045.07.095c.1.168.101.38.101.804v2.93c0 .41 0 .615-.096.778a1 1 0 0 1-.069.099c-.122.144-.316.213-.701.35-.935.33-1.403.497-1.75.316a.9.9 0 0 1-.223-.164c-.112-.117-.168-.176-.2-.191l-.015-.007a.6.6 0 0 0-.173-.014 5 5 0 0 1-.485-.025c-.231-.028-.45-.09-.636-.249a1 1 0 0 1-.127-.128c-.158-.185-.22-.404-.249-.635-.027-.223-.026-.502-.026-.831V4.22c0-.33 0-.609.026-.832.028-.231.09-.45.25-.636a1 1 0 0 1 .126-.127c.186-.158.405-.22.636-.249.157-.019.343-.024.554-.026.075 0 .113 0 .14-.009a.1.1 0 0 0 .032-.013c.026-.013.074-.057.169-.147a1 1 0 0 1 .183-.133m-.465 1.404c.003-.186.004-.279-.047-.337l-.024-.022c-.06-.049-.146-.044-.319-.034q-.075.004-.139.012c-.162.02-.226.054-.265.087a1 1 0 0 0-.05.05c-.032.038-.066.101-.086.264-.021.171-.022.4-.022.747v1.56c0 .347.001.577.022.748.02.162.054.226.087.264a1 1 0 0 0 .05.051c.038.033.102.066.264.086q.064.008.14.012c.171.01.257.014.317-.035l.023-.022c.051-.058.05-.15.049-.334l-.002-.419V3.907q0-.248.002-.455M5.4 4.2c-.22 0-.4.18-.4.4v.8a.401.401 0 0 0 .8 0v-.8c0-.22-.18-.4-.4-.4'],
+shop:['2 1.98 6 6','M4.038 5.1c.047 0 .123.028.275.082a2.05 2.05 0 0 0 1.372 0c.152-.054.229-.081.276-.083h.02c.047.002.123.03.274.085a1.9 1.9 0 0 0 .732.113c.262-.013.393-.019.481.052l.036.033c.076.085.077.172.079.346V6l-.003.886c-.002.436-.004.655-.113.81a.6.6 0 0 1-.146.145c-.155.108-.373.109-.81.109h-.078c-.217 0-.326 0-.41-.041a.4.4 0 0 1-.182-.182c-.04-.084-.04-.193-.04-.41V6.85a.8.8 0 0 0-1.601 0v.467c0 .217 0 .326-.041.41a.4.4 0 0 1-.182.182c-.083.04-.192.04-.41.04H3.48c-.45 0-.675.001-.833-.114a.6.6 0 0 1-.133-.132C2.4 7.545 2.4 7.319 2.4 6.87v-.86q0-.173.002-.31c.003-.162.005-.243.083-.327l.035-.032c.09-.07.215-.062.464-.046q.057.004.116.004.336-.002.644-.115c.15-.055.225-.083.272-.085zM6.61 2c.327 0 .49 0 .662.087.02.01.053.03.072.042.162.105.224.215.35.435.16.276.306.617.306.936l-.006.102c-.062.504-.576.898-1.094.898-.27 0-.538-.107-.742-.28-.101-.087-.152-.13-.185-.132h-.015c-.033.003-.084.048-.187.139-.191.17-.457.273-.77.273-.314 0-.58-.104-.773-.273-.103-.091-.154-.136-.187-.139h-.015c-.033.002-.084.045-.185.132-.204.173-.471.28-.74.28-.519 0-1.032-.394-1.095-.898L2 3.5l.006-.12c.03-.284.16-.575.298-.816.127-.22.19-.33.352-.435l.072-.042C2.9 2 3.063 2 3.39 2z'],
+settings:['1.98 1.98 6.04 6.04','M4.453 2.445c.099-.623.995-.623 1.094 0a.554.554 0 0 0 .872.361c.51-.37 1.145.264.775.774a.554.554 0 0 0 .361.872c.623.1.623.996 0 1.095a.554.554 0 0 0-.361.873c.37.51-.264 1.144-.775.774a.554.554 0 0 0-.872.361c-.099.623-.995.623-1.094 0a.554.554 0 0 0-.872-.361c-.51.37-1.145-.264-.775-.774a.554.554 0 0 0-.361-.873c-.623-.099-.623-.996 0-1.095a.554.554 0 0 0 .361-.872c-.37-.51.264-1.144.775-.774a.554.554 0 0 0 .872-.361M5 3.8a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4'],
+tokens:['-34 -34 68 68','M-8.55 22.55 Q-10.45 20.65 -11.8 18.55 -17.85 17.25 -22.55 12.55 -29 6.1 -29 -3 L-29 -5 -29 -7 Q-29 -16.1 -22.55 -22.55 -16.1 -29 -7 -29 2.1 -29 8.55 -22.55 10.45 -20.65 11.8 -18.5 17.85 -17.25 22.55 -12.55 28.2 -6.9 28.9 0.8 L28.95 8.65 Q28.4 16.7 22.55 22.5 L22.5 22.55 Q16.1 29 7 29 -2.1 29 -8.55 22.55 M9 -7 Q9 -10.2 7.9 -12.95 6.7 -15.9 4.3 -18.3 L3.8 -18.8 Q-0.75 -23 -7 -23 -13.6 -23 -18.3 -18.35 L-18.35 -18.3 Q-23 -13.6 -23 -7 L-22.9 -5 Q-22.3 0.35 -18.3 4.3 L-15 6.9 Q-11.8 8.8 -7.9 9 L-7 9 Q-0.4 9 4.3 4.3 8.25 0.35 8.9 -4.95 L9 -7 M23 3 Q23 -3.6 18.3 -8.3 L14.65 -11.05 14.9 -9.2 14.95 -1.35 Q14.4 6.7 8.55 12.5 L8.5 12.55 Q4.95 16.1 0.6 17.7 3.55 19 7 19 13.6 19 18.3 14.3 22.25 10.35 22.9 5.05 L23 3'],
+users:['1.1 1.17 7.76 7.76','M6.206 5.593c.092.017.145.06.25.144.566.455.603 1.118.603 1.227 0 .166-.167.83-2.08.83-1.912 0-2.079-.664-2.079-.83 0-.109.036-.772.602-1.227.105-.084.158-.127.25-.144l.04-.005c.093-.007.205.04.427.138a1.9 1.9 0 0 0 1.52 0c.222-.097.334-.145.427-.138zm-4.214-.505c.093-.007.204.041.426.138l.078.034c.136.063.165.165.083.29l-.045.066a2.5 2.5 0 0 0-.433 1.348c0 .114-.099.214-.208.182-.71-.205-.792-.566-.792-.682 0-.109.035-.772.601-1.227.105-.084.158-.127.25-.144zm6.014.005c.092.017.145.06.25.144.566.455.602 1.118.602 1.227 0 .117-.083.477-.794.682-.109.032-.206-.068-.206-.182l-.004-.106a2.53 2.53 0 0 0-.431-1.242l-.044-.065c-.083-.126-.054-.228.083-.291l.077-.034c.222-.097.334-.145.427-.138zM4.979 2.8c.623 0 1.129.488 1.16 1.102q.003-.02.005-.039-.002.026-.003.05.002.026.003.05A1.164 1.164 0 1 1 4.979 2.8m-1.8-.5c.122 0 .183 0 .239.048.035.03.064.082.07.128.008.073-.044.152-.15.31a1.95 1.95 0 0 0-.313 1.282c.029.27.043.404-.039.472a.2.2 0 0 1-.036.024c-.095.05-.174.005-.333-.083A1.161 1.161 0 0 1 3.18 2.3m3.6 0a1.164 1.164 0 0 1 .562 2.182c-.159.088-.239.131-.333.082a.2.2 0 0 1-.036-.024c-.082-.068-.068-.203-.04-.472q.012-.101.011-.205c0-.398-.119-.768-.323-1.077-.105-.158-.157-.237-.148-.31a.22.22 0 0 1 .068-.128c.056-.048.117-.048.24-.048'],
+lock:['-34 -34 68 68','M-8 -10 L-8 -6 8 -6 8 -10 Q8 -13.3 5.65 -15.65 3.3 -18 0 -18 -3.3 -18 -5.65 -15.7 L-5.7 -15.65 Q-8 -13.3 -8 -10 M16 -6 Q20 -6 20 -2 L20 22 Q20 23.95 19.05 24.95 18.05 26 16 26 L-16 26 Q-18.05 26 -19.05 24.95 -20 23.95 -20 22 L-20 -2 Q-20 -6 -16 -6 L-16 -10 Q-16 -16.6 -11.35 -21.3 L-11.3 -21.35 Q-6.6 -26 0 -26 6.6 -26 11.3 -21.3 16 -16.6 16 -10 L16 -6 M0 2 Q-2.05 2 -3.5 3.45 L-3.55 3.5 Q-5 4.95 -5 7 -5 9.05 -3.55 10.5 L-2.45 11.35 -2.1 11.75 -2 12.2 -2 15.75 Q-2 16.55 -1.4 17.15 -0.8 17.75 0 17.75 0.8 17.75 1.4 17.15 2 16.55 2 15.75 L2 12.2 2.15 11.75 2.5 11.35 3.5 10.55 3.55 10.5 Q5 9.05 5 7 5 4.95 3.5 3.45 2.05 2 0 2'],
+unlock:['-34 -34 68 68','M-16.25 -7 L-16 -6.95 -16 -14 Q-16 -20.4 -11.6 -25 L-11.35 -25.35 -11 -25.6 Q-6.4 -30 0 -30 6.6 -30 11.3 -25.35 L11.3 -25.3 Q16 -20.6 16 -14 L16 -13 Q16 -12.15 15.45 -11.55 14.85 -11 14 -11 L10 -11 Q9.15 -11 8.6 -11.55 8 -12.15 8 -13 L8 -14 Q8 -17.3 5.65 -19.65 L5.6 -19.65 Q3.3 -22 0 -22 -3.3 -22 -5.65 -19.65 -8 -17.3 -8 -14 L-8 -6 15.5 -3.25 Q19.5 -2.8 19.05 1.15 L16.2 25 Q15.75 29 11.75 28.55 L-20 24.8 Q-24 24.3 -23.55 20.3 L-20.7 -3.55 Q-20.25 -7.5 -16.25 -7 M-1.25 2.8 Q-3.3 2.55 -4.95 3.85 -6.65 5.15 -6.85 7.2 L-6.85 7.25 Q-7.1 9.2 -5.8 10.85 L-4.85 11.85 -4.55 12.25 -4.5 12.75 -4.9 16.25 Q-5 17 -4.45 17.7 -3.95 18.35 -3.1 18.45 -2.4 18.55 -1.7 18.05 -1.05 17.5 -0.95 16.7 L-0.55 13.2 -0.35 12.7 0.05 12.4 1.2 11.7 1.25 11.7 Q2.85 10.4 3.1 8.4 3.3 6.35 2 4.7 L2.05 4.7 Q0.75 3.05 -1.25 2.8'],
+qr:['2 2 6 6','M3.655 5.4c.418 0 .627 0 .767.118a1 1 0 0 1 .061.06c.117.14.118.349.118.767v.71c0 .417 0 .627-.118.766a1 1 0 0 1-.061.062C4.282 8 4.073 8 3.655 8h-.71c-.418 0-.627 0-.766-.117a1 1 0 0 1-.062-.062C2 7.681 2 7.472 2 7.055v-.71c0-.418 0-.627.117-.767a1 1 0 0 1 .062-.06c.14-.118.348-.119.766-.119zm2.822 1.95c.116 0 .174 0 .218.024a.2.2 0 0 1 .082.082c.024.044.024.102.024.219 0 .116 0 .174-.024.219a.2.2 0 0 1-.082.082c-.044.023-.102.023-.218.023h-.751c-.117 0-.175 0-.22-.023a.2.2 0 0 1-.082-.082C5.4 7.849 5.4 7.79 5.4 7.674c0-.115 0-.174.024-.218a.2.2 0 0 1 .083-.082c.044-.023.102-.024.219-.024zm1.199 0c.116 0 .174 0 .219.024a.2.2 0 0 1 .082.082C8 7.5 8 7.558 8 7.675c0 .116 0 .174-.023.219a.2.2 0 0 1-.082.082c-.045.023-.103.023-.22.023-.115 0-.174 0-.218-.023a.2.2 0 0 1-.083-.082c-.023-.045-.023-.103-.023-.22 0-.115 0-.174.023-.218a.2.2 0 0 1 .083-.082c.044-.023.102-.024.219-.024m-4.5-1.25c-.212 0-.318 0-.388.06l-.027.027c-.06.07-.06.177-.06.388v.25c0 .211 0 .317.06.387q.012.015.027.028c.07.06.176.06.388.06h.25c.21 0 .316 0 .386-.06l.029-.028c.06-.07.06-.176.06-.387v-.25c0-.211 0-.317-.06-.388l-.029-.028c-.07-.06-.175-.06-.386-.06zm3.1-.696c.112 0 .168 0 .211.023a.2.2 0 0 1 .087.087c.022.042.022.099.022.21v.047c0 .07 0 .104-.01.132a.2.2 0 0 1-.132.134.2.2 0 0 1-.05.007l-.165.002a.201.201 0 0 0-.185.142.5.5 0 0 0-.008.132v.254c0 .112 0 .17-.022.212a.2.2 0 0 1-.087.087c-.042.022-.1.022-.211.022-.112 0-.169 0-.211-.022a.2.2 0 0 1-.087-.087c-.022-.043-.023-.1-.023-.212v-.789c0-.169 0-.254.048-.31l.023-.022c.056-.048.14-.049.31-.049zm1.4 0c.111 0 .167.001.21.023a.2.2 0 0 1 .088.087c.021.042.021.099.021.21v.79c0 .17 0 .255-.048.311l-.022.022c-.056.048-.14.048-.31.048h-.49c-.112 0-.168 0-.21-.022a.2.2 0 0 1-.089-.087c-.022-.043-.021-.1-.021-.21V6.53c0-.07 0-.104.008-.133a.2.2 0 0 1 .133-.133.2.2 0 0 1 .052-.008l.164-.002a.2.2 0 0 0 .052-.007.2.2 0 0 0 .133-.134.5.5 0 0 0 .008-.134v-.254c0-.112 0-.169.022-.211a.2.2 0 0 1 .088-.087c.043-.022.099-.023.21-.023M3.656 2c.417 0 .626 0 .766.117a1 1 0 0 1 .061.06c.118.14.118.35.118.768v.71c0 .418 0 .627-.118.767a1 1 0 0 1-.061.06c-.14.118-.349.118-.767.118h-.71c-.418 0-.627 0-.766-.118a1 1 0 0 1-.062-.06C2 4.282 2 4.073 2 3.655v-.71c0-.418 0-.628.117-.767a1 1 0 0 1 .062-.06C2.319 2 2.527 2 2.945 2zm3.399 0c.418 0 .628 0 .767.117a1 1 0 0 1 .06.06c.118.14.118.35.118.768v.71c0 .418 0 .627-.117.767a1 1 0 0 1-.06.06c-.14.118-.35.118-.768.118h-.71c-.418 0-.627 0-.767-.118a1 1 0 0 1-.06-.06c-.118-.14-.118-.349-.118-.767v-.71c0-.418 0-.628.118-.767a1 1 0 0 1 .06-.06C5.718 2 5.927 2 6.345 2zm-3.88.7c-.21 0-.317 0-.387.06l-.027.027c-.06.07-.06.176-.06.388v.25c0 .211 0 .317.06.388l.027.027c.07.06.176.06.388.06h.25c.21 0 .316 0 .386-.06l.029-.027c.06-.07.06-.177.06-.388v-.25c0-.212 0-.318-.06-.388l-.029-.027c-.07-.06-.175-.06-.386-.06zm3.4 0c-.211 0-.316 0-.387.06l-.028.027c-.06.07-.06.176-.06.388v.25c0 .211 0 .317.06.388l.028.027c.07.06.176.06.387.06h.25c.212 0 .318 0 .388-.06l.027-.027c.06-.07.06-.177.06-.388v-.25c0-.212 0-.318-.06-.388l-.027-.027c-.07-.06-.176-.06-.388-.06z'],
+pad:['1.32 1.34 7.42 7.42','M5 2.8c1 0 1.5-.7 2.6-.1s1.7 4.6.4 4.9-1.3-1-3-1-1.7 1.3-3 1-.5-4.3.4-4.9 1.6.1 2.6.1m1.63 2.364a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1M3.336 3.497a.4.4 0 0 0-.4.4c0 .155 0 .233-.028.293a.3.3 0 0 1-.146.146c-.06.027-.137.027-.292.027h-.04a.4.4 0 0 0 0 .8c.193 0 .29 0 .36.043a.3.3 0 0 1 .103.103c.043.07.043.168.043.361v.027a.4.4 0 0 0 .8 0v-.04c0-.181 0-.272.038-.34a.3.3 0 0 1 .116-.116c.068-.038.159-.038.34-.038a.4.4 0 0 0 0-.8h-.028c-.155 0-.232 0-.292-.027a.3.3 0 0 1-.146-.146c-.028-.06-.028-.138-.028-.292 0-.221-.18-.4-.4-.4m2.393.767a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1m1.8 0a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1m-.9-.9a.5.5 0 1 0 .001 1 .5.5 0 0 0 0-1']};
+function mkic(n){var a=P[n],s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox',a[0]);s.setAttribute('class','k');s.setAttribute('aria-hidden','true');var p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',a[1]);s.appendChild(p);return s}
+document.querySelectorAll('[data-k]').forEach(function(el){el.replaceWith(mkic(el.dataset.k))});
+var host=true,priv=true,pi=document.getElementById('pi'),pt=document.getElementById('pt');
+document.getElementById('priv').addEventListener('click',function(){if(!host)return;priv=!priv;pi.innerHTML='';pi.appendChild(mkic(priv?'lock':'unlock'));pt.textContent=priv?'Privée':'Ouverte'});
+function setV(h){host=h;document.getElementById('quit').style.display=h?'none':'block';document.getElementById('pn').textContent=h?'Léa':'Max';document.getElementById('pl').textContent=h?'Niv. 7':'Niv. 3';document.getElementById('pc').textContent=h?'1 250':'480';document.getElementById('av').style.background=h?'#ffd6e1':'#ffeeb0';document.getElementById('avb').style.background=h?'#7ec8f5':'#ff9eb5';document.getElementById('priv').style.cursor=h?'pointer':'default'}
+document.getElementById('v1').onclick=function(){setV(true)};document.getElementById('v2').onclick=function(){setV(false)};
+document.getElementById('quit').onclick=function(){this.textContent='Tu as quitté la chambre'};
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+var W=680,H=440,V=THREE.Vector3,tab='room';
+var R=new THREE.WebGLRenderer({canvas:document.getElementById('cv'),antialias:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.setSize(W,H,false);R.setClearColor(0x1c1840,1);
+var S=new THREE.Scene(),Cam=new THREE.OrthographicCamera(-1,1,1,-1,-60,120);
+var fh=5.3,a=W/H;Cam.position.set(9,8.5,9);Cam.lookAt(0,1.3,0);Cam.left=-fh*a;Cam.right=fh*a;Cam.top=fh;Cam.bottom=-fh;Cam.updateProjectionMatrix();Cam.updateMatrixWorld();
+S.add(new THREE.AmbientLight(0xffffff,.8));var dl=new THREE.DirectionalLight(0xffffff,.7);dl.position.set(3,6,4);S.add(dl);
+function mat(c,b){return b?new THREE.MeshBasicMaterial({color:c}):new THREE.MeshLambertMaterial({color:c,flatShading:true})}
+function bx(w,h,d,c,x,y,z,o,b){var g=new THREE.Group(),m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(c,b));g.add(m);if(o){var l=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshBasicMaterial({color:0x0f0d22,side:THREE.BackSide}));l.scale.setScalar(1.05);g.add(l)}g.position.set(x,y,z);return g}
+var room=new THREE.Group();S.add(room);
+for(var i=0;i<8;i++)for(var j=0;j<8;j++){room.add(bx(1,.3,1,(i+j)%2?0x4a4390:0x453f88,i-3.5,.15,j-3.5))}
+room.add(bx(8.3,4,.3,0x6a62b8,0,2.3,-4.15));room.add(bx(.3,4,8.3,0x5b53a6,-4.15,2.3,0));
+var rug=new THREE.Mesh(new THREE.CylinderGeometry(1.9,1.9,.06,24),mat(0xff9eb5));rug.position.set(0,.33,.6);room.add(rug);
+var rr=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.2,.08,24),mat(0xffe08a));rr.position.set(0,.34,.6);room.add(rr);
+var cG=new THREE.Group();cG.userData.k='c';cG.add(bx(1.9,.5,.9,0x8a7be0,0,.55,0,1));cG.add(bx(1.1,.25,.7,0xe8e4ff,0,.925,0,1));cG.add(bx(.4,.3,.15,0xff5a4d,.1,1.2,-.15,1));cG.add(bx(.18,.08,.05,0x0f0d22,-.3,1.0,.36));cG.position.set(2.4,0,-3.4);room.add(cG);
+var tG=new THREE.Group();tG.add(bx(2.1,.5,.8,0x8a7be0,0,.55,0,1));tG.add(bx(1.9,1.2,.18,0x0f0d22,0,1.5,0,1));tG.add(bx(1.65,.95,.2,0x8fe3c0,0,1.5,.02,0,1));tG.position.set(-.2,0,-3.4);room.add(tG);
+var mG=new THREE.Group();mG.userData.k='m';mG.add(bx(1.35,2.4,.14,0xffe08a,0,1.5,0,1));mG.add(bx(1.05,2.05,.16,0xcfeeff,0,1.5,.02,0,1));mG.position.set(-2.8,0,-3.9);room.add(mG);
+function fig(bc,cc){var f=new THREE.Group();function p(g,c,x,y,z){var m=new THREE.Group();m.add(new THREE.Mesh(g,mat(c)));var l=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0x0f0d22,side:THREE.BackSide}));l.scale.setScalar(1.1);m.add(l);m.position.set(x,y,z);f.add(m)}
+p(new THREE.CylinderGeometry(.3,.36,.7,8),bc,0,0,0);p(new THREE.SphereGeometry(.3,8,6),0xffe0c2,0,.58,0);p(new THREE.CylinderGeometry(.32,.32,.12,8),cc,0,.82,0);
+[-.1,.1].forEach(function(x){var e=new THREE.Mesh(new THREE.SphereGeometry(.04,6,4),new THREE.MeshBasicMaterial({color:0x0f0d22}));e.position.set(x,.6,.27);f.add(e)});return f}
+var me=fig(0xff9eb5,0x3fa9f5),fr=fig(0xffd23f,0xff5a4d);var meG=new THREE.Group();meG.add(me);S.add(meG);var frG=new THREE.Group();frG.add(fr);S.add(frG);
+var A={g:meG,f:me,x:0,z:2,tx:0,tz:2,sp:3.2},B={g:frG,f:fr,x:-1.8,z:.6,tx:-1.8,tz:.6,sp:1.6};
+var stC=[2.4,-2.2],stM=[-2.8,-2.8];
+function step(a,dt,t){var dx=a.tx-a.x,dz=a.tz-a.z,d=Math.hypot(dx,dz);if(d>.05){var s=Math.min(d,a.sp*dt);a.x+=dx/d*s;a.z+=dz/d*s;var ty=Math.atan2(dx,dz),df=ty-a.f.rotation.y;df=Math.atan2(Math.sin(df),Math.cos(df));a.f.rotation.y+=df*.25;a.g.position.set(a.x,.8+Math.abs(Math.sin(t*10))*.09,a.z);a.f.rotation.z=Math.sin(t*10)*.08;return true}
+a.g.position.set(a.x,.8+Math.sin(t*2+a.x)*.02,a.z);a.f.rotation.z=0;return false}
+var Ray=new THREE.Raycaster(),pl=new THREE.Plane(new V(0,1,0),-.3),st=document.getElementById('st');
+st.addEventListener('click',function(e){if(tab!=='room')return;if(e.target.closest&&e.target.closest('button,.w'))return;var r=st.getBoundingClientRect(),n=new THREE.Vector2((e.clientX-r.left)/W*2-1,-((e.clientY-r.top)/H)*2+1);Ray.setFromCamera(n,Cam);
+var hits=Ray.intersectObjects([cG,mG],true);if(hits.length){var o=hits[0].object;while(o&&!o.userData.k)o=o.parent;if(o){var s=o.userData.k==='c'?stC:stM;A.tx=s[0];A.tz=s[1];return}}
+var p=new V();if(Ray.ray.intersectPlane(pl,p)){A.tx=Math.max(-3.5,Math.min(3.5,p.x));A.tz=Math.max(-3.3,Math.min(3.5,p.z))}});
+var hc=document.getElementById('hc'),hm=document.getElementById('hm'),ov=document.getElementById('ov');
+function scr(x,y,z,el){var v=new V(x,y,z).project(Cam);el.style.left=((v.x*.5+.5)*W)+'px';el.style.top=((-v.y*.5+.5)*H)+'px'}
+var shop='<div style="font-size:20px;font-weight:600;margin-bottom:12px">Boutique</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"><div class="it"><div class="sw" style="background:#ffd6e1"></div>Tapis rayé<div style="color:#6f5be0;font-weight:600;margin-top:2px">120</div></div><div class="it"><div class="sw" style="background:#ffeeb0"></div>Lampe<div style="color:#6f5be0;font-weight:600;margin-top:2px">80</div></div><div class="it"><div class="sw" style="background:#cdeedd"></div>Plante<div style="color:#6f5be0;font-weight:600;margin-top:2px">60</div></div><div class="it"><div class="sw" style="background:#e1d8fb"></div>Poster mural<div style="color:#6f5be0;font-weight:600;margin-top:2px">40</div></div></div>';
+var set='<div style="font-size:20px;font-weight:600;margin-bottom:4px">Paramètres</div><div class="tg">Son<div class="sl"></div></div><div class="tg">Musique<div class="sl"></div></div><div class="tg">Messages éphémères<div class="sl"></div></div>';
+document.getElementById('tabs').addEventListener('click',function(e){var b=e.target.closest('.tb');if(!b)return;tab=b.dataset.t;this.querySelectorAll('.tb').forEach(function(x){x.classList.toggle('on',x===b)});ov.style.display=tab==='room'?'none':'block';ov.innerHTML=tab==='shop'?shop:tab==='set'?set:''});
+var msgs=[['Max','salut la team'],['Léa','on lance une manche ?'],['Sam','je mise 100 !'],['Max','go go go'],['Léa','prêts quand vous voulez']],mi=0,ch=document.getElementById('chat');
+function say(){var m=msgs[mi++%msgs.length],d=document.createElement('div');d.className='w';d.style.cssText='padding:6px 14px;font-size:13px;border-radius:14px;animation:fo 7s forwards;width:fit-content;max-width:240px';d.innerHTML='<span style="color:#6f5be0;font-weight:600">'+m[0]+' :</span> '+m[1];ch.appendChild(d);setTimeout(function(){d.remove()},7000);while(ch.children.length>4)ch.removeChild(ch.firstChild)}
+say();setInterval(say,3200);
+var t0=performance.now(),last=t0,bt=0;
+function tick(){requestAnimationFrame(tick);var n=performance.now(),dt=Math.min((n-last)/1000,.05);last=n;var t=(n-t0)/1000;
+var mvA=step(A,dt,t);bt-=dt;if(bt<0){bt=2+Math.random()*3;B.tx=-3+Math.random()*5;B.tz=-1+Math.random()*4.2}step(B,dt,t);
+var nc=tab==='room'&&!mvA&&Math.hypot(A.x-stC[0],A.z-stC[1])<.3,nm=tab==='room'&&!mvA&&Math.hypot(A.x-stM[0],A.z-stM[1])<.3;
+hc.style.display=nc?'block':'none';hm.style.display=nm?'block':'none';
+if(nc)scr(2.4,2.0,-3.4,hc);if(nm)scr(-2.8,3.0,-3.9,hm);
+R.render(S,Cam)}
+tick()})();
+</script>
+</body>
+</html>

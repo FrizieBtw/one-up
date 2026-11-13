@@ -3,7 +3,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import { CanvasTexture, MathUtils, SRGBColorSpace, type Group } from "three";
-import { parseAvatarConfig, type BlackjackSnapshot, type CardSnapshot } from "@stepup/shared";
+import { parseAvatarConfig, parseCosmetics, type AvatarCosmetics, type BlackjackSnapshot, type CardSnapshot } from "@stepup/shared";
 import { Avatar, lookFromId, type AvatarLook, type AvatarPose } from "@/avatar/Avatar";
 import { useNav } from "@/lib/nav";
 
@@ -98,9 +98,9 @@ function Hand({ cards, hiddenCount = 0, center, rotationY }: { cards: CardSnapsh
   );
 }
 
-const DEALER_LOOK: AvatarLook = { skin: "#f2b98f", hair: "#2a1b4d", outfit: "#2a1b4d", hairStyle: 1, eyeStyle: 1 };
+const DEALER_LOOK: AvatarLook = { v: 3, skin: "#f2b98f", hairColor: "#2a1b4d", face: "Driver", outfit: "Driver", legs: "Driver", acc: [] };
 
-function Seat({ name, look, angle, cards, isTurn, won }: { name: string; look: AvatarLook; angle: number; cards: CardSnapshot[]; isTurn: boolean; won: boolean }) {
+function Seat({ name, look, cosmetics, angle, cards, isTurn, won }: { name: string; look: AvatarLook; cosmetics: AvatarCosmetics; angle: number; cards: CardSnapshot[]; isTurn: boolean; won: boolean }) {
   const pose = useRef<AvatarPose>({ moving: false, emote: null });
   pose.current.emote = won ? "cheer" : null;
   const at = (radius: number): [number, number] => [Math.sin(angle) * radius, Math.cos(angle) * radius * 0.82 + 0.3];
@@ -115,7 +115,7 @@ function Seat({ name, look, angle, cards, isTurn, won }: { name: string; look: A
         </mesh>
       )}
       <group position={[ax, 0, az]} rotation-y={angle + Math.PI}>
-        <Avatar look={look} name={name} pose={pose} />
+        <Avatar look={look} name={name} pose={pose} cosmetics={cosmetics} />
       </group>
       <Hand cards={cards} center={at(TABLE_RADIUS - 1.05)} rotationY={angle * 0.6} />
     </>
@@ -123,7 +123,7 @@ function Seat({ name, look, angle, cards, isTurn, won }: { name: string; look: A
 }
 
 /** Table de Blackjack Battle : croupier au fond, joueurs en arc de cercle devant la caméra. */
-export default function BlackjackTable3D({ blackjack, identities }: { blackjack: BlackjackSnapshot; identities: Record<string, { id: string; avatar: string }> }) {
+export default function BlackjackTable3D({ blackjack, identities }: { blackjack: BlackjackSnapshot; identities: Record<string, { id: string; avatar: string; cosmetics: string }> }) {
   const dealerPose = useRef<AvatarPose>({ moving: false, emote: null });
   // La séquence de lancement attend ce signal : scène chargée et contexte WebGL créé.
   useEffect(() => () => useNav.getState().setGameReady(false), []);
@@ -184,6 +184,7 @@ export default function BlackjackTable3D({ blackjack, identities }: { blackjack:
           key={sessionId}
           name={player.name}
           look={lookOf(sessionId)}
+          cosmetics={parseCosmetics(identities[sessionId]?.cosmetics)}
           angle={seats.length === 1 ? 0 : MathUtils.lerp(-arc, arc, i / (seats.length - 1))}
           cards={player.cards}
           isTurn={blackjack.turn === sessionId}

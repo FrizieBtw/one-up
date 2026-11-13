@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { parseAvatarConfig, type PresenceVisibility } from "@stepup/shared";
+import { cosmeticsFromEquipped, ownedEmoteIds, parseAvatarConfig, type InventoryEntry, type PresenceVisibility } from "@stepup/shared";
 import { env } from "./env";
 
 export interface MatchParticipant {
@@ -16,6 +16,10 @@ export interface MatchReward {
   xpGained: number;
   xp: number;
   achievements: string[];
+  /** Jetons gagnés (session et missions), solde après versement, missions accomplies. */
+  tokensGained: number;
+  balance: number;
+  missions: string[];
 }
 
 const admin =
@@ -43,8 +47,40 @@ export async function recordMatch(sessionId: string, gameId: string, rounds: num
     logFailure("record_match_failed", { sessionId, gameId, message: error.message });
     return [];
   }
-  const rewards = (data as { rewards?: { user_id: string; xp_gained: number; xp: number; achievements: string[] }[] } | null)?.rewards ?? [];
-  return rewards.map((r) => ({ userId: r.user_id, xpGained: r.xp_gained, xp: r.xp, achievements: r.achievements }));
+  const rewards =
+    (data as { rewards?: { user_id: string; xp_gained: number; xp: number; achievements: string[]; tokens_gained: number; balance: number; missions: string[] }[] } | null)
+      ?.rewards ?? [];
+  return rewards.map((r) => ({
+    userId: r.user_id,
+    xpGained: r.xp_gained,
+    xp: r.xp,
+    achievements: r.achievements,
+    tokensGained: r.tokens_gained,
+    balance: r.balance,
+    missions: r.missions,
+  }));
+}
+
+/**
+ * Objets de boutique d'un compte : cosmétiques équipés (JSON d'`AvatarCosmetics`, revalidé) et emotes possédées.
+ * Sans Supabase ou en cas d'erreur : aucun cosmétique, seules les emotes gratuites restent utilisables.
+ */
+export async function fetchCosmetics(userId: string): Promise<{ cosmetics: string; ownedEmotes: string[] }> {
+  const none = { cosmetics: "{}", ownedEmotes: [] };
+  if (!admin) return none;
+  const { data, error } = await admin.from("user_inventory").select("equipped, shop_items(category, payload)").eq("user_id", userId);
+  if (error) {
+    logFailure("fetch_cosmetics_failed", { userId, message: error.message });
+    return none;
+  }
+  const rows = (data ?? []).flatMap((row) => {
+    const item = (Array.isArray(row.shop_items) ? row.shop_items[0] : row.shop_items) as InventoryEntry | null | undefined;
+    return item ? [{ equipped: row.equipped as boolean, item }] : [];
+  });
+  return {
+    cosmetics: JSON.stringify(cosmeticsFromEquipped(rows.filter((r) => r.equipped).map((r) => r.item))),
+    ownedEmotes: ownedEmoteIds(rows.map((r) => r.item)),
+  };
 }
 
 /** Avatar enregistré d'un compte, revalidé (la base ne vérifie que la forme générale). Chaîne JSON, ou vide. */

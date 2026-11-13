@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maquette de l'écran de profil OneUP</title>
+<!--
+  Maquette de référence validée (2026-11-14) : écran ouvert en cliquant l'encart de profil (en haut à droite).
+  Sections : Profil, Missions quotidiennes (minuteur de renouvellement), Succès (en lignes comme les missions, récompense en jetons, bouton Réclamer),
+  Classement (Elo : victoire = points gagnés, défaite = points perdus ; podium pour le top 3, puis liste ; onglets Amis / Général),
+  Social (ajout par pseudo, demandes, amis avec présence et Rejoindre / Regarder), Historique (variation d'Elo et jetons par partie).
+  À fixer : Elo de départ (1 000 ici), coefficient K, règle pour les parties à plus de deux joueurs, saisons, liste réelle des missions et succès.
+  Autonome : ouvrir dans un navigateur (polices Google Fonts chargées en ligne).
+-->
+<link href="https://fonts.googleapis.com/css2?family=Jersey+15&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#eeedf7;padding:24px;font-family:'Outfit',system-ui,sans-serif}
+.hint{font-size:13px;color:#6d6a8f;margin:0 0 8px;max-width:680px}
+#sg{position:relative;width:680px;height:510px;border-radius:16px;overflow:hidden;background:#1c1840;font-family:'Outfit',sans-serif;color-scheme:light}
+#sg button,#sg span,#sg div,#sg input,#sg h3,#sg h4{font-family:'Outfit',sans-serif}
+.w{position:absolute;background:#fff;color:#2a2750;border-radius:18px}
+.fl{position:absolute;left:50%;top:300px;width:420px;height:420px;background:#453f88;transform:translateX(-50%) rotate(45deg) scaleY(.5);border-radius:14px}
+.wl{position:absolute;left:0;right:0;top:0;height:300px;background:#6a62b8}
+#tabs button{border:0;background:transparent;color:#000;font-weight:600;font-size:13px;padding:6px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:6px}
+#tabs button.on{background:#6f5be0;color:#fff}
+#tabs svg{width:1.3em;height:1.3em;fill:currentColor}
+#pf{border:0;background:#fff;color:#2a2750;cursor:pointer;display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;border-radius:18px;text-align:left;outline:2px solid transparent}
+#pf:hover{outline-color:#cfcbe8}#pf.on{outline-color:#6f5be0}
+.sn{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;border:0;background:transparent;color:#000;font-weight:600;font-size:13px;padding:8px 12px;border-radius:11px;cursor:pointer}
+.sn.on{background:#6f5be0;color:#fff}
+.bd{background:#e0364f;color:#fff;border-radius:999px;font-size:11px;font-weight:600;padding:0 6px;min-width:16px;text-align:center}
+.pb{border:0;background:#6f5be0;color:#fff;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:10px;cursor:pointer}
+.pb.g{background:#f1eeff;color:#6f5be0}
+.pb.d{background:#ffe9ec;color:#c4243b}
+.pb.o{background:#e3f6ec;color:#1f8a58;cursor:default}
+h3{margin:0 0 8px;font-size:18px;font-weight:600;color:#000}
+h4{margin:14px 0 6px;font-size:13px;font-weight:600;color:#7a77a0}
+.bar{height:8px;border-radius:6px;background:#eceaf6;overflow:hidden}.bar i{display:block;height:100%;background:#6f5be0;border-radius:6px}
+.rw{display:flex;align-items:center;gap:12px;padding:10px 12px;background:#f4f3fb;border-radius:14px;margin-bottom:8px;font-size:14px;color:#000}
+.rw small{display:block;color:#7a77a0;font-size:12px;font-weight:400}
+.rw.me{background:#f1eeff;outline:2px solid #6f5be0}
+.st{background:#f4f3fb;border-radius:14px;padding:10px 12px}.st b{display:block;font-size:20px;color:#000}.st span{font-size:12px;color:#7a77a0}
+.ib{width:36px;height:36px;border-radius:11px;border:2px solid #0f0d22;flex:none}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px}
+.rk{width:28px;text-align:center;font-weight:600;font-size:15px;color:#7a77a0;flex:none}
+.av{width:34px;height:34px;border-radius:50%;flex:none}
+.up{color:#1f8a58;font-weight:600;font-size:12.5px}.dn{color:#c4243b;font-weight:600;font-size:12.5px}
+.in{flex:1;height:34px;border:1.5px solid #cfcbe8;background:#f7f6fd;border-radius:10px;padding:0 12px;font-size:13px;color:#2a2750;outline:0}
+.sg2{display:inline-flex;background:#f1eeff;border-radius:999px;padding:3px}.sg2 button{border:0;background:transparent;color:#000;font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;cursor:pointer}.sg2 button.on{background:#6f5be0;color:#fff}
+.pod{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:end;margin:6px 0 14px}
+.pc{text-align:center}.pc .pa{width:54px;height:54px;border-radius:50%;margin:0 auto 4px;border:3px solid #fff;box-shadow:0 0 0 2px var(--c)}
+.pc.f .pa{width:64px;height:64px}
+.pc .pn{font-weight:600;font-size:14px;color:#000}.pc .pe{font-size:13px;color:#6d6a8f;margin-bottom:5px}
+.pb2{border-radius:14px 14px 0 0;background:var(--c);display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font-size:26px;font-weight:600;color:#2a2750}
+.pc.me .pn{color:#6f5be0}
+.sb::-webkit-scrollbar{width:8px}.sb::-webkit-scrollbar-thumb{background:#d6d2ee;border-radius:8px}
+#to{position:absolute;left:50%;transform:translateX(-50%);bottom:24px;background:#2a2750;color:#fff;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:600;display:none;z-index:20;white-space:nowrap}
+</style>
+</head>
+<body>
+<p class="hint">Clique l'encart de profil en haut à droite pour ouvrir ou fermer l'écran. Le classement est un Elo : victoire = points gagnés, défaite = points perdus.</p>
+<div id="sg"><div class="wl"></div><div class="fl"></div>
+<div class="w" style="left:14px;top:14px;padding:6px 16px 6px 8px;display:flex;align-items:center;gap:8px;z-index:8"><div style="width:30px;height:30px;background:#ffe08a;border-radius:9px"></div><span style="font-family:'Jersey 15',sans-serif;font-size:30px;line-height:1.1">One<span style="color:#6f5be0;font-family:'Jersey 15',sans-serif">UP</span></span></div>
+<div class="w" id="tabs" style="left:50%;transform:translateX(-50%);top:14px;padding:3px;display:flex;gap:2px;border-radius:999px;z-index:8"></div>
+<button id="pf" class="w" style="right:14px;top:14px;z-index:8"></button>
+<div class="w" id="ov" style="left:14px;right:14px;top:96px;bottom:14px;z-index:7;overflow:hidden;display:none"></div>
+<div id="to"></div></div>
+<script>
+(function(){
+var I={door:['1.96 1.97 6.13 6.13','M4.766 2.048c.34-.187.803-.039 1.729.26.404.13.606.196.734.344q.04.045.07.095c.1.168.101.38.101.804v2.93c0 .41 0 .615-.096.778a1 1 0 0 1-.069.099c-.122.144-.316.213-.701.35-.935.33-1.403.497-1.75.316a.9.9 0 0 1-.223-.164c-.112-.117-.168-.176-.2-.191l-.015-.007a.6.6 0 0 0-.173-.014 5 5 0 0 1-.485-.025c-.231-.028-.45-.09-.636-.249a1 1 0 0 1-.127-.128c-.158-.185-.22-.404-.249-.635-.027-.223-.026-.502-.026-.831V4.22c0-.33 0-.609.026-.832.028-.231.09-.45.25-.636a1 1 0 0 1 .126-.127c.186-.158.405-.22.636-.249.157-.019.343-.024.554-.026.075 0 .113 0 .14-.009a.1.1 0 0 0 .032-.013c.026-.013.074-.057.169-.147a1 1 0 0 1 .183-.133m-.465 1.404c.003-.186.004-.279-.047-.337l-.024-.022c-.06-.049-.146-.044-.319-.034q-.075.004-.139.012c-.162.02-.226.054-.265.087a1 1 0 0 0-.05.05c-.032.038-.066.101-.086.264-.021.171-.022.4-.022.747v1.56c0 .347.001.577.022.748.02.162.054.226.087.264a1 1 0 0 0 .05.051c.038.033.102.066.264.086q.064.008.14.012c.171.01.257.014.317-.035l.023-.022c.051-.058.05-.15.049-.334l-.002-.419V3.907q0-.248.002-.455M5.4 4.2c-.22 0-.4.18-.4.4v.8a.401.401 0 0 0 .8 0v-.8c0-.22-.18-.4-.4-.4'],
+shop:['2 1.98 6 6','M4.038 5.1c.047 0 .123.028.275.082a2.05 2.05 0 0 0 1.372 0c.152-.054.229-.081.276-.083h.02c.047.002.123.03.274.085a1.9 1.9 0 0 0 .732.113c.262-.013.393-.019.481.052l.036.033c.076.085.077.172.079.346V6l-.003.886c-.002.436-.004.655-.113.81a.6.6 0 0 1-.146.145c-.155.108-.373.109-.81.109h-.078c-.217 0-.326 0-.41-.041a.4.4 0 0 1-.182-.182c-.04-.084-.04-.193-.04-.41V6.85a.8.8 0 0 0-1.601 0v.467c0 .217 0 .326-.041.41a.4.4 0 0 1-.182.182c-.083.04-.192.04-.41.04H3.48c-.45 0-.675.001-.833-.114a.6.6 0 0 1-.133-.132C2.4 7.545 2.4 7.319 2.4 6.87v-.86q0-.173.002-.31c.003-.162.005-.243.083-.327l.035-.032c.09-.07.215-.062.464-.046q.057.004.116.004.336-.002.644-.115c.15-.055.225-.083.272-.085zM6.61 2c.327 0 .49 0 .662.087.02.01.053.03.072.042.162.105.224.215.35.435.16.276.306.617.306.936l-.006.102c-.062.504-.576.898-1.094.898-.27 0-.538-.107-.742-.28-.101-.087-.152-.13-.185-.132h-.015c-.033.003-.084.048-.187.139-.191.17-.457.273-.77.273-.314 0-.58-.104-.773-.273-.103-.091-.154-.136-.187-.139h-.015c-.033.002-.084.045-.185.132-.204.173-.471.28-.74.28-.519 0-1.032-.394-1.095-.898L2 3.5l.006-.12c.03-.284.16-.575.298-.816.127-.22.19-.33.352-.435l.072-.042C2.9 2 3.063 2 3.39 2z'],
+settings:['1.98 1.98 6.04 6.04','M4.453 2.445c.099-.623.995-.623 1.094 0a.554.554 0 0 0 .872.361c.51-.37 1.145.264.775.774a.554.554 0 0 0 .361.872c.623.1.623.996 0 1.095a.554.554 0 0 0-.361.873c.37.51-.264 1.144-.775.774a.554.554 0 0 0-.872.361c-.099.623-.995.623-1.094 0a.554.554 0 0 0-.872-.361c-.51.37-1.145-.264-.775-.774a.554.554 0 0 0-.361-.873c-.623-.099-.623-.996 0-1.095a.554.554 0 0 0 .361-.872c-.37-.51.264-1.144.775-.774a.554.554 0 0 0 .872-.361M5 3.8a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4'],
+tokens:['-34 -34 68 68','M-8.55 22.55 Q-10.45 20.65 -11.8 18.55 -17.85 17.25 -22.55 12.55 -29 6.1 -29 -3 L-29 -5 -29 -7 Q-29 -16.1 -22.55 -22.55 -16.1 -29 -7 -29 2.1 -29 8.55 -22.55 10.45 -20.65 11.8 -18.5 17.85 -17.25 22.55 -12.55 28.2 -6.9 28.9 0.8 L28.95 8.65 Q28.4 16.7 22.55 22.5 L22.5 22.55 Q16.1 29 7 29 -2.1 29 -8.55 22.55 M9 -7 Q9 -10.2 7.9 -12.95 6.7 -15.9 4.3 -18.3 L3.8 -18.8 Q-0.75 -23 -7 -23 -13.6 -23 -18.3 -18.35 L-18.35 -18.3 Q-23 -13.6 -23 -7 L-22.9 -5 Q-22.3 0.35 -18.3 4.3 L-15 6.9 Q-11.8 8.8 -7.9 9 L-7 9 Q-0.4 9 4.3 4.3 8.25 0.35 8.9 -4.95 L9 -7 M23 3 Q23 -3.6 18.3 -8.3 L14.65 -11.05 14.9 -9.2 14.95 -1.35 Q14.4 6.7 8.55 12.5 L8.5 12.55 Q4.95 16.1 0.6 17.7 3.55 19 7 19 13.6 19 18.3 14.3 22.25 10.35 22.9 5.05 L23 3']};
+function ic(n,w){var a=I[n];return '<svg viewBox="'+a[0]+'" style="width:'+(w||'1.3em')+';height:'+(w||'1.3em')+';fill:currentColor;flex:none"><path d="'+a[1]+'"/></svg>'}
+var $=function(i){return document.getElementById(i)},open=true,sec='rank',coins=1250,end=Date.now()+(8*3600+12*60+44)*1000,sc='f';
+var M=[['Joue 3 parties',3,1,50],['Gagne une manche de Blackjack',1,0,80],['Invite un ami dans ta chambre',1,1,40]],got={},gotA={};
+var AC=[['Premier pas','Termine ta première partie','#8fe3c0',1,1,100],['Fortune','Possède 1 000 jetons','#ffe08a',1,1,150],['Gagnant','Gagne 10 parties','#ff9eb5',6,10,200],['Sociable','Aie 5 amis','#7ec8f5',3,5,120],['Décorateur','Pose 5 meubles','#b9a3f5',2,5,100],['Collectionneur','Possède 10 objets','#ffd6a8',4,10,250]];
+var LF=[['Max','#ffeeb0',1342,16],['Sam','#ffd6e1',1215,-9],['Léa','#ffd6e1',1084,14,1],['Nina','#cfeeff',1007,-12],['Théo','#e1d8fb',960,-8]],LG=[['Zed','#ffd6a8',2104,21],['Kira','#cdeedd',2051,-7],['Pixel_Pat','#cfeeff',1987,12],['Noa','#e1d8fb',1934,9],['Bao','#ffeeb0',1902,-15]];
+var FR=[['Max','#ffeeb0','dans sa chambre',1,'Rejoindre'],['Sam','#ffd6e1','joue au Blackjack Battle',2,'Regarder'],['Nina','#cfeeff','hors ligne · il y a 2 h',0,'']],RQ=['Théo'],HI=[['Blackjack Battle','Victoire','+120',14,'Aujourd’hui'],['Blackjack Battle','Défaite','+20',-11,'Aujourd’hui'],['Blackjack Battle','Victoire','+110',16,'Hier'],['Blackjack Battle','Victoire','+130',12,'Hier']];
+function toast(m){var t=$('to');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(function(){t.style.display='none'},2400)}
+function fmt(ms){ms=Math.max(0,ms);var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);s%=60;return [h,m,s].map(function(n){return ('0'+n).slice(-2)}).join(':')}
+function dl(d){return '<span class="'+(d>=0?'up':'dn')+'">'+(d>=0?'▲ +':'▼ −')+Math.abs(d)+'</span>'}
+function head(){$('tabs').innerHTML=[['room','door','Chambre'],['shop','shop','Boutique'],['set','settings','Paramètres']].map(function(a){return '<button data-t="'+a[0]+'" class="'+(!open&&a[0]==='room'?'on':'')+'">'+ic(a[1])+a[2]+'</button>'}).join('');
+$('tabs').querySelectorAll('button').forEach(function(b){b.onclick=function(){if(b.dataset.t==='room'){open=false;draw()}else toast('Écran « '+(b.dataset.t==='shop'?'Boutique':'Paramètres')+' » : voir la maquette dédiée.')}});
+$('pf').className='w'+(open?' on':'');
+$('pf').innerHTML='<span style="width:46px;height:46px;border-radius:50%;background:#ffd6e1;overflow:hidden;position:relative;flex:none;display:block"><span style="position:absolute;left:12px;top:8px;width:21px;height:21px;border-radius:50%;background:#ffe0c2;display:block"></span><span style="position:absolute;left:4px;top:32px;width:37px;height:30px;border-radius:50%;background:#7ec8f5;display:block"></span></span><span style="display:block"><span style="display:block;font-size:15px;font-weight:600;line-height:1.2">Léa <span style="font-size:12px;font-weight:500;color:#6f5be0;background:#eceaff;border-radius:8px;padding:1px 7px;margin-left:4px">Niv. 7</span></span><span style="display:flex;align-items:center;gap:5px;margin-top:3px;color:#e0a100">'+ic('tokens')+'<span style="font-size:14px;font-weight:500;color:#2a2750">'+coins.toLocaleString('fr-FR')+'</span></span></span>'}
+function nbM(){return M.filter(function(m,i){return m[2]>=m[1]&&!got[i]}).length}
+function nbA(){return AC.filter(function(a,i){return a[3]>=a[4]&&!gotA[i]}).length}
+function pod(L){var C=['#ffd23f','#d5d8ea','#e8a46b'],o=[1,0,2],cl=['','f',''],hh=[74,100,56];
+return '<div class="pod">'+o.map(function(k,j){var p=L[k];if(!p)return '<div></div>';return '<div class="pc '+cl[j]+(p[4]?' me':'')+'" style="--c:'+C[k]+'"><div class="pa" style="background:'+p[1]+'"></div><div class="pn">'+p[0]+(p[4]?' (toi)':'')+'</div><div class="pe">'+p[2]+' Elo</div><div class="pb2" style="height:'+hh[j]+'px">'+(k+1)+'</div></div>'}).join('')+'</div>'}
+function draw(){head();var ov=$('ov');if(!open){ov.style.display='none';return}ov.style.display='block';
+var N=[['prof','Profil'],['miss','Missions',nbM()],['succ','Succès',nbA()],['rank','Classement'],['soc','Social',RQ.length],['hist','Historique']],b='';
+if(sec==='prof')b='<h3>Profil</h3><div style="display:flex;gap:14px;align-items:center;margin-bottom:12px"><div style="width:76px;height:76px;border-radius:50%;background:#ffd6e1;overflow:hidden;position:relative;flex:none"><div style="position:absolute;left:21px;top:13px;width:34px;height:34px;border-radius:50%;background:#ffe0c2"></div><div style="position:absolute;left:7px;top:52px;width:62px;height:50px;border-radius:50%;background:#7ec8f5"></div></div><div style="flex:1"><div style="font-size:20px;font-weight:600;color:#000">Léa <span style="font-size:13px;color:#6f5be0;background:#eceaff;border-radius:8px;padding:1px 8px;margin-left:4px;font-weight:500">Niv. 7</span></div><div class="bar" style="margin:8px 0 4px"><i style="width:62%"></i></div><div style="font-size:12px;color:#7a77a0">620 / 1 000 XP pour le niveau 8</div></div></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"><div class="st"><b>42</b><span>Parties jouées</span></div><div class="st"><b>26</b><span>Victoires</span></div><div class="st"><b>1 084</b><span>Classement Elo</span></div><div class="st"><b>1 250</b><span>Jetons</span></div><div class="st"><b>12</b><span>Meubles possédés</span></div><div class="st"><b>3</b><span>Amis</span></div></div><div style="margin-top:12px"><button class="pb g" id="ed">Modifier mon personnage</button></div>';
+if(sec==='miss'){b='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Missions quotidiennes</h3><div id="tm" style="background:#f1eeff;color:#6f5be0;border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600"></div></div>'+M.map(function(m,i){var done=m[2]>=m[1];return '<div class="rw"><div style="flex:1"><div>'+m[0]+'</div><div class="bar" style="margin-top:6px"><i style="width:'+Math.min(100,m[2]/m[1]*100)+'%;background:'+(done?'#2fa56f':'#6f5be0')+'"></i></div><small>'+m[2]+' / '+m[1]+'</small></div><div style="display:flex;align-items:center;gap:4px;color:#e0a100;font-weight:600">'+ic('tokens','15px')+'<span style="color:#000">+'+m[3]+'</span></div>'+(got[i]?'<button class="pb o">Réclamé</button>':done?'<button class="pb" data-m="'+i+'">Réclamer</button>':'<button class="pb g" style="cursor:default">En cours</button>')+'</div>'}).join('')}
+if(sec==='succ'){b='<h3>Succès <span style="font-size:13px;color:#7a77a0;font-weight:500">'+AC.filter(function(a){return a[3]>=a[4]}).length+' / '+AC.length+' débloqués</span></h3>'+AC.map(function(a,i){var done=a[3]>=a[4];return '<div class="rw"><div class="ib" style="background:'+a[2]+(done?'':';opacity:.5')+'"></div><div style="flex:1"><div>'+a[0]+'</div><small>'+a[1]+'</small><div class="bar" style="margin-top:6px"><i style="width:'+Math.min(100,a[3]/a[4]*100)+'%;background:'+(done?'#2fa56f':'#6f5be0')+'"></i></div><small>'+a[3]+' / '+a[4]+'</small></div><div style="display:flex;align-items:center;gap:4px;color:#e0a100;font-weight:600">'+ic('tokens','15px')+'<span style="color:#000">+'+a[5]+'</span></div>'+(gotA[i]?'<button class="pb o">Réclamé</button>':done?'<button class="pb" data-s="'+i+'">Réclamer</button>':'<button class="pb g" style="cursor:default">En cours</button>')+'</div>'}).join('')}
+if(sec==='rank'){var L=(sc==='f'?LF:LG).slice().sort(function(a,b){return b[2]-a[2]});
+b='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">Classement</h3><div class="sg2"><button data-sc="f" class="'+(sc==='f'?'on':'')+'">Amis</button><button data-sc="g" class="'+(sc==='g'?'on':'')+'">Général</button></div></div><div style="font-size:12px;color:#7a77a0;margin-bottom:4px">Classement Elo : une victoire fait gagner des points, une défaite en fait perdre. Battre un adversaire mieux classé rapporte plus.</div>'+pod(L)+L.slice(3).map(function(p,i){return '<div class="rw'+(p[4]?' me':'')+'"><div class="rk">'+(i+4)+'</div><div class="av" style="background:'+p[1]+'"></div><div style="flex:1"><div style="font-weight:600">'+p[0]+(p[4]?' <span style="font-size:11.5px;color:#6f5be0;font-weight:600">(toi)</span>':'')+'</div></div><div>'+dl(p[3])+'</div><div style="font-weight:600;font-size:15px;min-width:62px;text-align:right">'+p[2]+'</div></div>'}).join('')+(sc==='g'?'<div style="text-align:center;color:#9a97bd;margin:-2px 0 6px;letter-spacing:3px">···</div><div class="rw me"><div class="rk">128</div><div class="av" style="background:#ffd6e1"></div><div style="flex:1"><div style="font-weight:600">Léa <span style="font-size:11.5px;color:#6f5be0;font-weight:600">(toi)</span></div></div><div>'+dl(14)+'</div><div style="font-weight:600;font-size:15px;min-width:62px;text-align:right">1084</div></div>':'')+'<div style="font-size:12px;color:#7a77a0">Les points Elo se remettent à 1 000 au début de chaque saison.</div>'}
+if(sec==='soc'){b='<h3>Social</h3><div style="display:flex;gap:8px;margin-bottom:10px"><input class="in" placeholder="Ajouter un ami par pseudo"><button class="pb" id="ad">Envoyer</button></div>'+(RQ.length?'<h4>Demandes reçues</h4>'+RQ.map(function(r,i){return '<div class="rw"><div style="flex:1;font-weight:600">'+r+'<small>veut devenir ton ami</small></div><button class="pb" data-a="'+i+'">Accepter</button><button class="pb d" data-r="'+i+'">Refuser</button></div>'}).join(''):'')+'<h4>Amis</h4>'+FR.map(function(f){return '<div class="rw"><div class="av" style="background:'+f[1]+'"></div><div style="flex:1"><div style="font-weight:600">'+f[0]+'</div><small><span class="dot" style="background:'+(f[3]?'#2fa56f':'#b5b2c9')+'"></span>'+f[2]+'</small></div>'+(f[4]?'<button class="pb g" data-j="'+f[0]+'">'+f[4]+'</button>':'')+'</div>'}).join('')}
+if(sec==='hist')b='<h3>Historique</h3>'+HI.map(function(h){return '<div class="rw"><div style="flex:1"><div style="font-weight:600">'+h[0]+'</div><small>'+h[4]+'</small></div><div style="font-weight:600;color:'+(h[1]==='Victoire'?'#1f8a58':'#c4243b')+'">'+h[1]+'</div><div style="min-width:54px;text-align:right">'+dl(h[3])+'<small style="font-size:11px">Elo</small></div><div style="display:flex;align-items:center;gap:4px;color:#e0a100;font-weight:600">'+ic('tokens','15px')+'<span style="color:#000">'+h[2]+'</span></div></div>'}).join('');
+ov.innerHTML='<div style="display:flex;height:100%"><div style="width:170px;padding:12px 8px;border-right:1px solid #eceaf6">'+N.map(function(n){return '<button class="sn'+(sec===n[0]?' on':'')+'" data-n="'+n[0]+'"><span>'+n[1]+'</span>'+(n[2]?'<span class="bd">'+n[2]+'</span>':'')+'</button>'}).join('')+'</div><div class="sb" style="flex:1;padding:16px 20px;overflow-y:auto;height:100%;box-sizing:border-box">'+b+'</div></div>';
+ov.querySelectorAll('[data-n]').forEach(function(x){x.onclick=function(){sec=x.dataset.n;draw()}});
+ov.querySelectorAll('[data-m]').forEach(function(x){x.onclick=function(){var i=+x.dataset.m;got[i]=1;coins+=M[i][3];draw();toast('+'+M[i][3]+' jetons reçus.')}});
+ov.querySelectorAll('[data-s]').forEach(function(x){x.onclick=function(){var i=+x.dataset.s;gotA[i]=1;coins+=AC[i][5];draw();toast('+'+AC[i][5]+' jetons reçus.')}});
+ov.querySelectorAll('[data-sc]').forEach(function(x){x.onclick=function(){sc=x.dataset.sc;draw()}});
+ov.querySelectorAll('[data-a]').forEach(function(x){x.onclick=function(){var n=RQ.splice(+x.dataset.a,1)[0];FR.unshift([n,'#e1d8fb','en ligne',1,'Rejoindre']);draw();toast(n+' est maintenant ton ami.')}});
+ov.querySelectorAll('[data-r]').forEach(function(x){x.onclick=function(){RQ.splice(+x.dataset.r,1);draw()}});
+ov.querySelectorAll('[data-j]').forEach(function(x){x.onclick=function(){toast('Direction la chambre de '+x.dataset.j+'.')}});
+if($('ad'))$('ad').onclick=function(){toast('Demande envoyée.')};
+if($('ed'))$('ed').onclick=function(){toast('Ouverture de l’éditeur d’avatar au miroir.')};
+tick()}
+function tick(){var t=$('tm');if(t)t.textContent='Nouvelles missions dans '+fmt(end-Date.now())}
+setInterval(tick,1000);
+$('pf').onclick=function(){open=!open;draw()};
+draw()})();
+</script>
+</body>
+</html>

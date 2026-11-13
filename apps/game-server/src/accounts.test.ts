@@ -1,13 +1,13 @@
 import { ColyseusTestServer } from "@colyseus/testing";
 import { createDeck, type Card as RuleCard } from "@stepup/blackjack";
-import { AVATAR_OPTIONS, LOBBY_ROOM_NAME, type LobbySnapshot } from "@stepup/shared";
+import { avatarFromSeed, LOBBY_ROOM_NAME, type LobbySnapshot } from "@stepup/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Comptes simulés : le jeton « user:<id>:<pseudo> » donne une identité de compte, sans Supabase.
 // La base est simulée aussi : on vérifie ce que le serveur LUI ENVOIE (résultats calculés ici, jamais par le client)
 // et ce qu'il fait des réponses (avatar, récompenses, présence filtrée).
 const recorded: { sessionId: string; gameId: string; rounds: number; participants: unknown[] }[] = [];
-const AVATAR = JSON.stringify({ skin: AVATAR_OPTIONS.skin[2], hair: AVATAR_OPTIONS.hair[3], outfit: AVATAR_OPTIONS.outfit[1], hairStyle: 2, eyeStyle: 1 });
+const AVATAR = JSON.stringify(avatarFromSeed("alice"));
 
 vi.mock("./auth", async (importOriginal) => {
   const original = await importOriginal<typeof import("./auth")>();
@@ -23,9 +23,12 @@ vi.mock("./auth", async (importOriginal) => {
 
 vi.mock("./persistence", () => ({
   fetchAvatar: async (userId: string) => (userId === "alice" ? AVATAR : ""),
+  // Alice : couronne et étincelles équipées, emote « Toupie » possédée. Bob : rien.
+  fetchCosmetics: async (userId: string) =>
+    userId === "alice" ? { cosmetics: JSON.stringify({ accessory: "cap" }), ownedEmotes: ["spin"] } : { cosmetics: "{}", ownedEmotes: [] },
   recordMatch: async (sessionId: string, gameId: string, rounds: number, participants: { user_id: string }[]) => {
     recorded.push({ sessionId, gameId, rounds, participants });
-    return participants.map((p) => ({ userId: p.user_id, xpGained: 65, xp: 165, achievements: ["first_session"] }));
+    return participants.map((p) => ({ userId: p.user_id, xpGained: 65, xp: 165, achievements: ["first_session"], tokensGained: 94, balance: 294, missions: ["daily_play"] }));
   },
   fetchFriendsWithPresenceSetting: async () => [
     { id: "bob", visibility: "everyone" },
@@ -83,6 +86,23 @@ describe("account features", () => {
       const players = alice.state().players;
       expect(players[alice.room.sessionId]!.avatar).toBe(AVATAR); // avatar enregistré, revalidé côté serveur
       expect(players[bob.room.sessionId]!.avatar).toBe(""); // pas d'avatar : le client utilisera celui par défaut
+      expect(JSON.parse(players[alice.room.sessionId]!.cosmetics)).toEqual({ accessory: "cap" });
+      expect(players[bob.room.sessionId]!.cosmetics).toBe("{}");
+
+      // Emotes de boutique : seul le propriétaire peut les jouer ; les gratuites restent ouvertes à tous.
+      const emotes: any[] = [];
+      alice.room.onMessage("emote", (m: any) => emotes.push(m));
+      bob.room.send("emote", { id: "spin" }); // non possédée
+      bob.room.send("emote", { id: "wave" });
+      alice.room.send("emote", { id: "spin" });
+      alice.room.send("emote", { id: "bow" }); // non possédée par Alice non plus
+      await settle();
+      expect(emotes).toEqual([
+        { sessionId: bob.room.sessionId, id: "wave" },
+        { sessionId: alice.room.sessionId, id: "spin" },
+      ]);
+      expect(bob.messages.error!.map((e) => e.code)).toEqual(["FORBIDDEN"]);
+      expect(alice.messages.error!.map((e) => e.code)).toEqual(["FORBIDDEN"]);
       expect(presence.get("alice").status).toBe("lobby");
       expect(presence.get("bob")).toMatchObject({ status: "lobby", gameId: "blackjack" });
 
@@ -106,7 +126,7 @@ describe("account features", () => {
         { user_id: "alice", rank: 1, score: 3, wins: 1, pushes: 0, losses: 0 },
         { user_id: "bob", rank: 2, score: 0, wins: 0, pushes: 0, losses: 1 },
       ]);
-      expect(alice.messages.rewards![0]).toEqual({ xpGained: 65, xp: 165, achievements: ["first_session"] });
+      expect(alice.messages.rewards![0]).toEqual({ xpGained: 65, xp: 165, achievements: ["first_session"], tokens: 94, balance: 294, missions: ["daily_play"] });
       expect(presence.get("alice").status).toBe("lobby"); // retour au statut « lobby » en fin de session
 
       alice.room.send("backToLobby", {});

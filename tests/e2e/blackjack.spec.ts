@@ -1,10 +1,13 @@
+import { guestLogin } from "./helpers/guestLogin";
+import { noAvatarModels } from "./helpers/noAvatarModels";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 async function player(browser: Browser, name: string): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
+  const context = await browser.newContext();
+  await noAvatarModels(context);
+  const page = await context.newPage();
   await page.goto("/");
-  await page.getByLabel("Pseudo").first().fill(name);
-  await page.getByRole("button", { name: "Entrer" }).click();
+  await guestLogin(page, name);
   return page;
 }
 
@@ -14,7 +17,8 @@ async function standUntilRoundEnds(pages: Page[], round: number) {
   await expect(async () => {
     for (const page of pages) {
       const stand = page.getByRole("button", { name: "Rester" });
-      if ((await stand.isVisible()) && (await stand.isEnabled())) await stand.click();
+      // Clic direct : l'attente de stabilité d'un clic classique dépend du rythme d'affichage, très ralenti par le rendu 3D logiciel.
+      if ((await stand.isVisible()) && (await stand.isEnabled())) await stand.dispatchEvent("click");
     }
     await expect(done).toBeVisible({ timeout: 500 });
   }).toPass({ timeout: 40_000 });
@@ -46,8 +50,10 @@ test("blackjack : recherche publique, lancement, deux manches, résultats, retou
   await bob.getByRole("button", { name: "Je suis prêt" }).click();
   await launch.click();
   await expect(bob.getByText("La partie démarre dans")).toBeVisible();
-  await alice.getByRole("button", { name: "Annuler le lancement" }).click();
-  await expect(bob.getByRole("status").filter({ hasText: "Lancement annulé." })).toBeVisible();
+  // Le compte à rebours dure 5 s : un clic classique attend que la page soit « stable » et peut y perdre la course
+  // quand la machine est chargée. On déclenche donc le clic directement.
+  await alice.getByRole("button", { name: "Annuler le lancement" }).dispatchEvent("click");
+  await expect(bob.getByRole("listitem").filter({ hasText: "Lancement annulé." })).toBeVisible();
   await launch.click();
 
   // Console : la séquence d'insertion joue chez tous. Bob la passe et arrive tout de suite en jeu (la scène est prête) ;
