@@ -9,7 +9,10 @@ export const playerNameSchema = z
   .trim()
   .min(3)
   .max(16)
-  .regex(/^[\p{L}\p{N}_\- ]+$/u, "Lettres, chiffres, espace, - et _ uniquement");
+  .regex(
+    /^[\p{L}\p{N}_\- ]+$/u,
+    "Lettres, chiffres, espace, - et _ uniquement",
+  );
 
 export interface Identity {
   id: string;
@@ -30,26 +33,51 @@ export const JoinError = {
   Unauthorized: "UNAUTHORIZED",
   AlreadyInRoom: "ALREADY_IN_ROOM",
   InProgress: "IN_PROGRESS",
+  Kicked: "KICKED",
 } as const;
 
 // ---------- Messages client → serveur (toujours validés côté serveur) ----------
 
 const empty = z.object({});
-const settingChange = z.object({ key: z.string().max(40), value: z.union([z.number(), z.boolean(), z.string().max(40)]) });
+const settingChange = z.object({
+  key: z.string().max(40),
+  value: z.union([z.number(), z.boolean(), z.string().max(40)]),
+});
 
 export const clientMessages = {
   ready: z.object({ ready: z.boolean() }),
   chat: z.object({ text: z.string().trim().min(1).max(CHAT_MAX_LENGTH) }),
   setSetting: settingChange,
-  setCapacity: z.object({ capacity: z.number().int() }),
+  /** Hôte, salon en attente : change de jeu (les réglages reviennent aux valeurs par défaut du nouveau jeu). */
+  setGame: z.object({ gameId: z.string().max(40) }),
+  /** Hôte : ouvre le salon à la recherche publique, ou le rend privé. */
+  setPublic: z.object({ isPublic: z.boolean() }),
+  /** Position de départ : la position locale du joueur quand il crée son salon (acceptée une seule fois, juste après l'arrivée). */
+  spawnAt: z.object({ x: z.number(), z: z.number() }),
+  /** Le joueur s'assoit au sol (immobile longtemps) ou se relève : les autres voient l'animation. */
+  sit: z.object({ sit: z.boolean() }),
+  /** Le joueur vient d'enregistrer son avatar ou ses objets équipés : le serveur les relit en base et les montre aux autres. */
+  refreshAvatar: z.object({}),
+  /** Hôte : ferme la chambre : tout le monde en sort et son code n'existe plus. */
+  closeRoom: z.object({}),
+  /** Hôte : exclut un joueur du salon (il ne peut plus y revenir tant que le salon existe). */
+  kick: z.object({ sessionId: z.string().max(40) }),
   /** Intention de déplacement (direction), jamais une position : le serveur simule. */
-  move: z.object({ x: z.number(), z: z.number() }),
+  move: z.object({
+    x: z.number(),
+    z: z.number(),
+    run: z.boolean().optional(),
+    jump: z.boolean().optional(),
+  }),
   emote: z.object({ id: z.enum(EMOTE_IDS) }),
-  /** Proposition de changement de règle ; `key` vaut CAPACITY_KEY pour la capacité. */
+  /** Proposition de changement de règle . */
   propose: settingChange,
   vote: z.object({ id: z.string().max(20), approve: z.boolean() }),
   resolveProposal: z.object({ id: z.string().max(20), accept: z.boolean() }),
-  report: z.object({ sessionId: z.string().max(40), reason: z.string().trim().max(200).optional() }),
+  report: z.object({
+    sessionId: z.string().max(40),
+    reason: z.string().trim().max(200).optional(),
+  }),
   /** Hôte : lance le compte à rebours, ou l'annule. */
   start: empty,
   cancelStart: empty,
@@ -63,22 +91,45 @@ export const clientMessages = {
 } as const;
 
 export type ClientMessageType = keyof typeof clientMessages;
-export type ClientMessage<T extends ClientMessageType> = z.infer<(typeof clientMessages)[T]>;
+export type ClientMessage<T extends ClientMessageType> = z.infer<
+  (typeof clientMessages)[T]
+>;
 
 // ---------- Messages serveur → client ----------
 
 export interface ServerMessages {
-  chat: { fromId: string; name: string; text: string; at: number };
+  chat: {
+    fromId: string;
+    name: string;
+    /** Couleur choisie par l'expéditeur, ou chaîne vide. */ color: string;
+    text: string;
+    at: number;
+  };
   notice:
     | { type: "settingChanged"; key: string }
-    | { type: "capacityChanged"; capacity: number }
     | { type: "hostChanged"; name: string }
+    | { type: "playerKicked"; name: string }
+    | { type: "playerJoined"; name: string }
+    | { type: "playerLeft"; name: string }
+    | { type: "gameChanged"; gameId: string }
+    | { type: "accessChanged"; isPublic: boolean }
     | { type: "proposalCreated"; name: string; key: string }
     | { type: "proposalResolved"; key: string; accepted: boolean }
     | { type: "launchCancelled" };
   emote: { sessionId: string; id: EmoteId };
+  /** Envoyé au joueur exclu juste avant sa déconnexion. */
+  kicked: { by: string };
+  /** La chambre vient d'être fermée par son hôte. */
+  closed: Record<string, never>;
   /** Récompenses de fin de session, envoyées une fois les résultats enregistrés (comptes uniquement). */
-  rewards: { xpGained: number; xp: number; achievements: string[]; tokens: number; balance: number; missions: string[] };
+  rewards: {
+    xpGained: number;
+    xp: number;
+    achievements: string[];
+    tokens: number;
+    balance: number;
+    missions: string[];
+  };
   error: { code: "RATE_LIMITED" | "INVALID" | "FORBIDDEN"; message: string };
 }
 
@@ -102,6 +153,14 @@ export interface LobbyPlayerSnapshot {
   z: number;
   dx: number;
   dz: number;
+  /** Maj maintenue : le joueur court. */
+  run: boolean;
+  /** Le joueur est en plein saut (animation). */
+  jump: boolean;
+  /** Le joueur est assis au sol (attente prolongée). */
+  sit: boolean;
+  /** Couleur choisie (PLAYER_COLORS), ou chaîne vide : couleur automatique. */
+  color: string;
 }
 
 export interface ProposalSnapshot {
@@ -130,7 +189,7 @@ export interface LobbySnapshot {
   blackjack: BlackjackSnapshot;
 }
 
-// ---------- Blackjack Battle ----------
+// ---------- Blackjack ----------
 
 export interface CardSnapshot {
   rank: string;

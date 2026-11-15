@@ -1,4 +1,4 @@
-// Règles de Blackjack Battle : fonctions pures, partagées par le serveur (autorité) et le client (affichage).
+// Règles de Blackjack : fonctions pures, partagées par le serveur (autorité) et le client (affichage).
 //
 // Règles retenues :
 // - Un paquet de 52 cartes, remélangé à chaque manche.

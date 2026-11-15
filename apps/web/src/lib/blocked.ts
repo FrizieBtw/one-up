@@ -9,7 +9,12 @@ export const useBlocked = create(
   persist<{ ids: string[]; toggle: (id: string) => void }>(
     (set) => ({
       ids: [],
-      toggle: (id) => set((s) => ({ ids: s.ids.includes(id) ? s.ids.filter((other) => other !== id) : [...s.ids, id] })),
+      toggle: (id) =>
+        set((s) => ({
+          ids: s.ids.includes(id)
+            ? s.ids.filter((other) => other !== id)
+            : [...s.ids, id],
+        })),
     }),
     { name: "stepup-blocked" },
   ),

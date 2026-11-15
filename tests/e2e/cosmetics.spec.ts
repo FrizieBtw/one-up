@@ -13,15 +13,16 @@ test("les cosmétiques s'affichent sur l'avatar sans erreur de rendu", async ({ 
   await mockAccount(page, url!);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Boutique" }).click();
+  const header = page.locator("header");
 
-  const preview = page.locator("div.relative").filter({ has: page.locator("canvas") }).first();
   for (const item of SHOP.filter((i) => ["outfit", "accessory"].includes(i.category))) {
-    await page.getByRole("button", { name: { outfit: "Tenues", accessory: "Accessoires" }[item.category]! }).click();
-    await page.getByRole("listitem").filter({ hasText: item.name }).getByRole("button", { name: "Essayer" }).click();
-    await expect(page.getByText(`Aperçu : ${item.name}`)).toBeVisible();
+    // « Essayer au miroir » : l'objet est porté par l'aperçu du studio d'avatar.
+    await header.getByRole("button", { name: "Boutique" }).click();
+    await page.getByRole("button", { name: item.name, exact: true }).click();
+    await page.getByRole("button", { name: "Essayer au miroir" }).click();
+    await expect(page.getByText(`Essai : ${item.name}`)).toBeVisible();
     await page.waitForTimeout(500);
-    await preview.screenshot({ path: `test-results/cosmetics/${item.id}.png` });
+    await page.locator("div.relative").filter({ has: page.locator("canvas") }).first().screenshot({ path: `test-results/cosmetics/${item.id}.png` });
   }
   expect(errors).toEqual([]);
 });

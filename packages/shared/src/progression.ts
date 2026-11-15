@@ -11,7 +11,15 @@ export function levelFromXp(xp: number): number {
   return level;
 }
 
-export function levelProgress(xp: number): { level: number; into: number; needed: number } {
+export function levelProgress(xp: number): {
+  level: number;
+  into: number;
+  needed: number;
+} {
   const level = levelFromXp(xp);
-  return { level, into: xp - xpForLevel(level), needed: xpForLevel(level + 1) - xpForLevel(level) };
+  return {
+    level,
+    into: xp - xpForLevel(level),
+    needed: xpForLevel(level + 1) - xpForLevel(level),
+  };
 }

@@ -1,49 +1,77 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { PRESENCE_PING_SECONDS } from "@stepup/shared";
-import { APP_NAME, getGame } from "@stepup/shared";
-import { BIG_CARTRIDGE_CLASS, CENTER_ANCHOR, anchor } from "@/cartridge/anchors";
-import { useAudio } from "@/lib/audio";
+import { getGame } from "@stepup/shared";
+import { joinChamber, resumeChamber } from "@/lib/chamber";
 import { useNav } from "@/lib/nav";
 import { useEconomy } from "@/lib/economy";
 import { pingPresence } from "@/lib/social";
-import { logout, useSession } from "@/lib/session";
-import { CartridgeBack } from "./CartridgeBack";
-import { CartridgeGrid } from "./CartridgeGrid";
-import { HomePanels } from "./HomePanels";
+import { padBackPressed } from "@/lib/input";
+import { DELETE_PENDING_KEY, useSession } from "@/lib/session";
+import { ConsoleScreen } from "./ConsoleScreen";
+import { HudHeader } from "./HudHeader";
 import { LobbyScreen } from "./LobbyScreen";
 import { LoginScreen } from "./LoginScreen";
+import { RoomScreen } from "./RoomScreen";
 import { AvatarInvite } from "./profile/AvatarInvite";
 import { ProfileScreen } from "./profile/ProfileScreen";
-import { Badge, Button } from "./ui";
-
-// WebGL : rendu côté client uniquement.
-const CartridgeScene = dynamic(() => import("@/cartridge/CartridgeScene"), { ssr: false });
+import { SettingsPanel } from "./SettingsPanel";
 
 /** Coquille unique de l'application : accueil, cartouche retournée et lobby partagent la même scène 3D. */
 export function StepUpApp() {
   const session = useSession();
-  const view = useNav((s) => s.view);
+  const current = useNav((s) => s.view);
+  // Paramètres, profil, boutique et console sont des fenêtres de même rang : une seule est affichée, la chambre reste derrière.
+  const view = current;
+  const profileTab = useNav((s) => s.profileTab);
   const code = useNav((s) => s.code);
-  const selectedGame = useNav((s) => (s.view === "cartridge" && s.gameId ? getGame(s.gameId) : undefined));
+  const selectedGame = useNav((s) =>
+    s.view === "cartridge" && s.gameId ? getGame(s.gameId) : undefined,
+  );
 
   useEffect(() => {
     const { syncFromUrl, back } = useNav.getState();
     syncFromUrl();
+    // Retour d'une reconnexion demandée avant la suppression du compte : on rouvre les Paramètres.
+    try {
+      if (sessionStorage.getItem(DELETE_PENDING_KEY) === "1")
+        useNav.getState().openSettings();
+    } catch {}
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && back();
     window.addEventListener("popstate", syncFromUrl);
+    // Exclu du salon par l'hôte : retour à sa propre chambre.
+    const onKicked = () => useNav.getState().goHome();
+    const onJoin = (e: Event) =>
+      void joinChamber((e as CustomEvent<string>).detail);
+    window.addEventListener("stepup:join", onJoin);
+    window.addEventListener("stepup:kicked", onKicked);
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("popstate", syncFromUrl);
+      window.removeEventListener("stepup:kicked", onKicked);
+      window.removeEventListener("stepup:join", onJoin);
       window.removeEventListener("keydown", onKey);
     };
   }, []);
 
+  // Manette : B ferme la fenêtre ouverte (console, profil, boutique, paramètres), comme Échap.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!padBackPressed()) return;
+      const { view: now, back } = useNav.getState();
+      if (now === "home" || now === "profile" || now === "settings") back();
+    }, 60);
+    return () => clearInterval(timer);
+  }, []);
+
   const signedIn = session.loaded && session.name !== null;
-  const audio = useAudio();
-  const balance = useEconomy((s) => s.balance);
+
+  // Après un rechargement de page : retour dans la chambre où l'on était.
+  useEffect(() => {
+    if (signedIn) void resumeChamber();
+  }, [signedIn]);
 
   // Solde et objets du compte : chargés à la connexion, vidés à la déconnexion.
   useEffect(() => {
@@ -64,74 +92,46 @@ export function StepUpApp() {
 
   return (
     <>
-      {signedIn && <CartridgeScene />}
-      <div ref={anchor(CENTER_ANCHOR)} className={`${BIG_CARTRIDGE_CLASS} pointer-events-none`} aria-hidden />
+      {signedIn &&
+        (view === "room" ||
+          view === "home" ||
+          view === "profile" ||
+          view === "settings") && (
+          <RoomScreen
+            active={current === "room"}
+            showPlayer={!(view === "profile" && profileTab === "avatar")}
+          />
+        )}
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-5 py-8">
-        <header className={`flex flex-wrap items-center gap-4 ${view === "lobby" ? "pr-28" : ""}`}>
-          <h1 className="grow text-5xl text-violet [text-shadow:0_4px_0_var(--color-sun)]">{APP_NAME}</h1>
-          {session.loaded && (
-            <div className="flex items-center gap-2 text-sm font-bold">
-              <button type="button" className="rounded-full border-2 border-ink bg-white px-3 py-0.5" aria-pressed={audio.muted} onClick={() => audio.setMuted(!audio.muted)}>
-                {audio.muted ? "Son coupé" : "Son activé"}
-              </button>
-              <input
-                type="range"
-                aria-label="Volume des effets sonores"
-                className="w-20 accent-violet"
-                min={0}
-                max={1}
-                step={0.1}
-                disabled={audio.muted}
-                value={audio.sfxVolume}
-                onChange={(e) => audio.setSfxVolume(Number(e.target.value))}
-              />
-            </div>
-          )}
-          {session.name && (
-            <div className="flex items-center gap-3">
-              <span className="font-bold">{session.name}</span>
-              <Badge className={session.kind === "guest" ? "bg-sun" : "bg-turquoise"}>{session.kind === "guest" ? "Invité" : "Compte"}</Badge>
-              {session.kind === "user" && balance !== null && <Badge className="bg-sun">{balance} jetons</Badge>}
-              {session.kind === "user" && view !== "lobby" && view !== "profile" && (
-                <Button variant="calm" onClick={() => useNav.getState().openProfile()}>
-                  Mon profil
-                </Button>
-              )}
-              {view !== "lobby" && (
-                <Button variant="plain" onClick={() => void logout()}>
-                  Déconnexion
-                </Button>
-              )}
-            </div>
-          )}
-        </header>
+      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-5 pt-24 pb-8">
+        <HudHeader />
 
         {!session.loaded ? (
           <p aria-busy="true">Chargement…</p>
         ) : view === "lobby" && code ? (
-          <LobbyScreen key={code} code={code} />
+          <LobbyScreen />
         ) : view === "profile" ? (
           session.userId ? (
-            <ProfileScreen userId={session.userId} onHome={() => useNav.getState().goHome()} />
+            <ProfileScreen
+              userId={session.userId}
+              onHome={() => useNav.getState().goHome()}
+            />
           ) : (
             <p role="alert" className="font-bold">
-              Le profil est réservé aux comptes. Les invités n'ont pas de progression enregistrée.
+              Le profil est réservé aux comptes. Les invités n'ont pas de
+              progression enregistrée.
             </p>
           )
+        ) : view === "settings" ? (
+          <SettingsPanel onClose={() => useNav.getState().closeSettings()} />
+        ) : view === "home" ? (
+          <ConsoleScreen />
         ) : (
-          <>
+          <div className="relative z-10">
             {session.userId && <AvatarInvite userId={session.userId} />}
-            <CartridgeGrid />
-          </>
+          </div>
         )}
       </main>
-
-      {signedIn && selectedGame && (
-        <CartridgeBack title={selectedGame.title} onClose={() => useNav.setState({ view: "home", gameId: null })}>
-          <HomePanels game={selectedGame} />
-        </CartridgeBack>
-      )}
     </>
   );
 }

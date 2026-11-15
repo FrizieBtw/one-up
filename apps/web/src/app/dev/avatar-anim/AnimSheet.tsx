@@ -10,7 +10,6 @@ const STATES: { label: string; moving: boolean; emote: EmoteId | null }[] = [
   { label: "marche", moving: true, emote: null },
   { label: "salut", moving: false, emote: "wave" },
   { label: "bravo", moving: false, emote: "cheer" },
-  { label: "danse", moving: false, emote: "dance" },
   { label: "rire", moving: false, emote: "laugh" },
   { label: "toupie", moving: false, emote: "spin" },
   { label: "révérence", moving: false, emote: "bow" },

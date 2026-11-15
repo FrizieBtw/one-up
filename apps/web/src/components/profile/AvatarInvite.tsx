@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/session";
 import { useNav } from "@/lib/nav";
-import { Button, Card } from "../ui";
+import { HudButton, HudPanel } from "../hud";
 
 const SKIP_KEY = "stepup-avatar-invite-skipped";
 
@@ -32,13 +32,16 @@ export function AvatarInvite({ userId }: { userId: string }) {
 
   if (!visible) return null;
   return (
-    <Card className="flex flex-wrap items-center gap-4 bg-sun">
-      <p className="grow font-bold">Bienvenue ! Personnalisez votre avatar pour vous reconnaître dans les salons. C'est facultatif.</p>
-      <Button variant="primary" onClick={() => useNav.getState().openProfile()}>
+    <HudPanel className="flex flex-wrap items-center gap-3 p-4">
+      <p className="grow text-sm text-black">
+        Bienvenue ! Personnalisez votre avatar pour vous reconnaître dans les
+        salons. C'est facultatif.
+      </p>
+      <HudButton onClick={() => useNav.getState().openProfile("avatar")}>
         Personnaliser
-      </Button>
-      <Button
-        variant="plain"
+      </HudButton>
+      <HudButton
+        variant="soft"
         onClick={() => {
           try {
             localStorage.setItem(SKIP_KEY, userId);
@@ -49,7 +52,7 @@ export function AvatarInvite({ userId }: { userId: string }) {
         }}
       >
         Plus tard
-      </Button>
-    </Card>
+      </HudButton>
+    </HudPanel>
   );
 }

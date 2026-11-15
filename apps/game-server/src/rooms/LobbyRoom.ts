@@ -1,16 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { type AuthContext, type Client, type Deferred, Room, ServerError, matchMaker } from "colyseus";
+import {
+  type AuthContext,
+  type Client,
+  type Deferred,
+  Room,
+  ServerError,
+  matchMaker,
+} from "colyseus";
 import { schema, t, type SchemaType } from "@colyseus/schema";
 import type { Delayed } from "@colyseus/timer";
 import {
-  CAPACITY_KEY,
+  ROOM_CAPACITY,
   CHAT_RATE,
   EMOTE_RATE,
   FREE_EMOTE_IDS,
   HOST_GRACE_SECONDS,
   JoinError,
   LAUNCH_COUNTDOWN_SECONDS,
-  LOBBY_SPAWN_RADIUS,
+  ROOM_HALF,
+  ROOM_SPAWN,
   LOBBY_TICK_MS,
   MAX_OPEN_PROPOSALS,
   PROPOSAL_RATE,
@@ -23,10 +31,10 @@ import {
   filterChat,
   generateRoomCode,
   getGame,
-  isValidCapacity,
   isValidSetting,
   launchBlocker,
   parseSettings,
+  pushApart,
   stepLobbyPosition,
   type GameDefinition,
   type Identity,
@@ -34,7 +42,12 @@ import {
 } from "@stepup/shared";
 import { verifyToken } from "../auth";
 import { BlackjackGame, BlackjackState, tuning } from "../games/blackjack";
-import { fetchAvatar, fetchCosmetics, recordMatch } from "../persistence";
+import {
+  fetchAvatar,
+  fetchColor,
+  fetchCosmetics,
+  recordMatch,
+} from "../persistence";
 import { presence } from "../presence";
 import { createRateLimiter } from "../rateLimit";
 
@@ -47,10 +60,14 @@ export const Player = schema(
     connected: t.boolean(),
     avatar: t.string().default(""),
     cosmetics: t.string().default("{}"),
+    color: t.string().default(""),
     x: t.float32(),
     z: t.float32(),
     dx: t.float32(),
     dz: t.float32(),
+    run: t.boolean(),
+    jump: t.boolean(),
+    sit: t.boolean(),
   },
   "Player",
 );
@@ -91,6 +108,7 @@ export type LobbyState = SchemaType<typeof LobbyState>;
 interface JoinAuth extends Identity {
   avatar: string;
   cosmetics: string;
+  color: string;
   ownedEmotes: string[];
 }
 
@@ -108,7 +126,10 @@ async function uniqueRoomCode(): Promise<string> {
   }
 }
 
-export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata }> {
+export class LobbyRoom extends Room<{
+  state: LobbyState;
+  metadata: LobbyMetadata;
+}> {
   state = new LobbyState();
   // Garde-fou global contre l'inondation de messages (le déplacement en envoie ~20/s au plus).
   maxMessagesPerSecond = 80;
@@ -121,11 +142,21 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
   /** Emotes de boutique possédées, par session. Côté serveur seulement : jamais synchronisé. */
   private ownedEmotes = new Map<string, Set<string>>();
   private launchTimer: Delayed | null = null;
+  /** Identités exclues par l'hôte : elles ne peuvent plus rejoindre ce salon. */
+  private kicked = new Set<string>();
+  /** Sièges qui ont déjà fixé leur position de départ (une seule fois). */
+  private placed = new Set<string>();
   private blackjack: BlackjackGame | null = null;
   private chatAllowed = createRateLimiter(CHAT_RATE.max, CHAT_RATE.windowMs);
   private emoteAllowed = createRateLimiter(EMOTE_RATE.max, EMOTE_RATE.windowMs);
-  private proposalAllowed = createRateLimiter(PROPOSAL_RATE.max, PROPOSAL_RATE.windowMs);
-  private reportAllowed = createRateLimiter(REPORT_RATE.max, REPORT_RATE.windowMs);
+  private proposalAllowed = createRateLimiter(
+    PROPOSAL_RATE.max,
+    PROPOSAL_RATE.windowMs,
+  );
+  private reportAllowed = createRateLimiter(
+    REPORT_RATE.max,
+    REPORT_RATE.windowMs,
+  );
 
   async onCreate(options: unknown) {
     const parsed = createLobbyOptionsSchema.safeParse(options);
@@ -133,16 +164,19 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     const { gameId, isPublic } = parsed.data;
     this.game = getGame(gameId)!;
     this.roomId = await uniqueRoomCode();
-    this.maxClients = this.game.maxPlayers;
+    this.maxClients = ROOM_CAPACITY;
 
     this.state.code = this.roomId;
     this.state.gameId = gameId;
     this.state.isPublic = isPublic;
-    this.state.capacity = this.maxClients;
+    this.state.capacity = ROOM_CAPACITY;
     this.state.settings = JSON.stringify(defaultSettings(this.game));
     await this.syncMetadata();
 
-    this.setSimulationInterval((deltaMs) => this.simulate(deltaMs / 1000), LOBBY_TICK_MS);
+    this.setSimulationInterval(
+      (deltaMs) => this.simulate(deltaMs / 1000),
+      LOBBY_TICK_MS,
+    );
 
     this.onMessage("ready", clientMessages.ready, (client, { ready }) => {
       const player = this.state.players.get(client.sessionId);
@@ -150,19 +184,36 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     });
 
     // Le client n'envoie qu'une direction ; la position est simulée ici (vitesse et limites imposées).
-    this.onMessage("move", clientMessages.move, (client, { x, z }) => {
-      const player = this.state.players.get(client.sessionId);
-      if (!player) return;
-      const direction = clampDirection(x, z);
-      player.dx = direction.x;
-      player.dz = direction.z;
-    });
+    this.onMessage(
+      "move",
+      clientMessages.move,
+      (client, { x, z, run, jump }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player) return;
+        const direction = clampDirection(x, z);
+        player.dx = direction.x;
+        player.dz = direction.z;
+        player.run = Boolean(run);
+        // Saut : une animation de 0,65 s, relancée au plus une fois à la fois.
+        if (jump && !player.jump) {
+          player.jump = true;
+          this.clock.setTimeout(() => (player.jump = false), 650);
+        }
+      },
+    );
 
     this.onMessage("emote", clientMessages.emote, (client, { id }) => {
       if (!this.state.players.has(client.sessionId)) return;
       // Les emotes de boutique ne sont utilisables que par leur propriétaire : le client ne s'en attribue aucune.
-      if (!FREE_EMOTE_IDS.includes(id) && !this.ownedEmotes.get(client.sessionId)?.has(id)) {
-        return this.refuse(client, "FORBIDDEN", "Cette emote n'est pas débloquée.");
+      if (
+        !FREE_EMOTE_IDS.includes(id) &&
+        !this.ownedEmotes.get(client.sessionId)?.has(id)
+      ) {
+        return this.refuse(
+          client,
+          "FORBIDDEN",
+          "Cette emote n'est pas débloquée.",
+        );
       }
       if (!this.emoteAllowed(client.sessionId)) return; // silencieux : simple anti-spam visuel
       this.announce("emote", { sessionId: client.sessionId, id });
@@ -171,36 +222,158 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     this.onMessage("chat", clientMessages.chat, (client, { text }) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      if (!this.chatAllowed(client.sessionId)) return this.refuse(client, "RATE_LIMITED", "Trop de messages, patientez un instant.");
-      this.announce("chat", { fromId: player.id, name: player.name, text: filterChat(text), at: Date.now() });
+      if (!this.chatAllowed(client.sessionId))
+        return this.refuse(
+          client,
+          "RATE_LIMITED",
+          "Trop de messages, patientez un instant.",
+        );
+      this.announce("chat", {
+        fromId: player.id,
+        name: player.name,
+        color: player.color,
+        text: filterChat(text),
+        at: Date.now(),
+      });
     });
 
     // Les statuts « prêt » sont volontairement conservés lors d'un changement de règle (cahier des charges 5.4).
-    this.onMessage("setSetting", clientMessages.setSetting, (client, { key, value }) => {
+    this.onMessage(
+      "setSetting",
+      clientMessages.setSetting,
+      (client, { key, value }) => {
+        if (!this.requireHost(client)) return;
+        if (!this.applyChange(key, value))
+          this.refuse(client, "INVALID", "Réglage invalide.");
+      },
+    );
+
+    // Chambre : l'hôte change de jeu avant de lancer, et ouvre ou ferme l'accès public.
+    this.onMessage("setGame", clientMessages.setGame, (client, { gameId }) => {
       if (!this.requireHost(client)) return;
-      if (key === CAPACITY_KEY || !this.applyChange(key, value)) this.refuse(client, "INVALID", "Réglage invalide.");
+      const game = getGame(gameId);
+      if (!game || this.state.phase !== "waiting")
+        return this.refuse(client, "INVALID", "Jeu invalide.");
+      this.game = game;
+      this.state.gameId = gameId;
+      this.announce("notice", { type: "gameChanged", gameId });
+      this.state.settings = JSON.stringify(defaultSettings(game));
+      void this.syncMetadata();
     });
 
-    this.onMessage("setCapacity", clientMessages.setCapacity, (client, { capacity }) => {
+    // Fermeture de la chambre : les autres en sont prévenus puis tout le monde est déconnecté ; le code disparaît avec le salon.
+    this.onMessage("closeRoom", clientMessages.closeRoom, (client) => {
       if (!this.requireHost(client)) return;
-      if (!this.applyChange(CAPACITY_KEY, capacity)) this.refuse(client, "INVALID", "Capacité invalide.");
+      this.broadcast("closed", {} satisfies ServerMessages["closed"]);
+      void this.disconnect();
     });
+
+    this.onMessage("kick", clientMessages.kick, (client, { sessionId }) => {
+      if (!this.requireHost(client)) return;
+      const target = this.clients.find((c) => c.sessionId === sessionId);
+      const player = this.state.players.get(sessionId);
+      if (!target || !player || sessionId === client.sessionId)
+        return this.refuse(client, "INVALID", "Joueur introuvable.");
+      this.kicked.add(player.id);
+      target.send("kicked", {
+        by: this.state.players.get(client.sessionId)?.name ?? "",
+      } satisfies ServerMessages["kicked"]);
+      // Retiré de l'état tout de suite : les autres le voient partir sans attendre la fermeture de sa connexion.
+      this.state.players.delete(sessionId);
+      this.blackjack?.removePlayer(sessionId);
+      target.leave();
+      this.announce("notice", { type: "playerKicked", name: player.name });
+    });
+
+    // Le créateur d'un salon garde sa place : sa position locale remplace l'apparition aléatoire, une seule fois.
+    this.onMessage("spawnAt", clientMessages.spawnAt, (client, { x, z }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (
+        !player ||
+        this.placed.has(client.sessionId) ||
+        !Number.isFinite(x) ||
+        !Number.isFinite(z)
+      )
+        return;
+      this.placed.add(client.sessionId);
+      player.x = Math.max(-ROOM_HALF, Math.min(ROOM_HALF, x));
+      player.z = Math.max(-ROOM_HALF, Math.min(ROOM_HALF, z));
+    });
+
+    this.onMessage("refreshAvatar", clientMessages.refreshAvatar, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.kind !== "user") return;
+      void Promise.all([
+        fetchAvatar(player.id),
+        fetchCosmetics(player.id),
+        fetchColor(player.id),
+      ]).then(([avatar, shop, color]) => {
+        // Le joueur a pu partir entre-temps.
+        if (this.state.players.get(client.sessionId) !== player) return;
+        player.avatar = avatar;
+        player.cosmetics = shop.cosmetics;
+        player.color = color;
+      });
+    });
+
+    this.onMessage("sit", clientMessages.sit, (client, { sit }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (player) player.sit = sit;
+    });
+
+    this.onMessage(
+      "setPublic",
+      clientMessages.setPublic,
+      (client, { isPublic }) => {
+        if (!this.requireHost(client)) return;
+        if (this.state.isPublic === isPublic) return;
+        this.state.isPublic = isPublic;
+        this.announce("notice", { type: "accessChanged", isPublic });
+        void this.syncMetadata();
+      },
+    );
 
     // Propositions : tout joueur propose, tous votent, l'hôte tranche. Le vote n'applique rien.
-    this.onMessage("propose", clientMessages.propose, (client, { key, value }) => {
-      const player = this.state.players.get(client.sessionId);
-      if (!player) return;
-      if (!this.isValidChange(key, value)) return this.refuse(client, "INVALID", "Proposition invalide.");
-      if (this.state.proposals.size >= MAX_OPEN_PROPOSALS) return this.refuse(client, "RATE_LIMITED", "Trop de propositions en attente.");
-      if (!this.proposalAllowed(player.id)) return this.refuse(client, "RATE_LIMITED", "Attendez avant de proposer à nouveau.");
-      const id = String(this.nextProposalId++);
-      this.state.proposals.set(
-        id,
-        new Proposal({ id, authorName: player.name, key, value: JSON.stringify(value), votesFor: 0, votesAgainst: 0 }),
-      );
-      this.votes.set(id, new Map());
-      this.announce("notice", { type: "proposalCreated", name: player.name, key });
-    });
+    this.onMessage(
+      "propose",
+      clientMessages.propose,
+      (client, { key, value }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player) return;
+        if (!this.isValidChange(key, value))
+          return this.refuse(client, "INVALID", "Proposition invalide.");
+        if (this.state.proposals.size >= MAX_OPEN_PROPOSALS)
+          return this.refuse(
+            client,
+            "RATE_LIMITED",
+            "Trop de propositions en attente.",
+          );
+        if (!this.proposalAllowed(player.id))
+          return this.refuse(
+            client,
+            "RATE_LIMITED",
+            "Attendez avant de proposer à nouveau.",
+          );
+        const id = String(this.nextProposalId++);
+        this.state.proposals.set(
+          id,
+          new Proposal({
+            id,
+            authorName: player.name,
+            key,
+            value: JSON.stringify(value),
+            votesFor: 0,
+            votesAgainst: 0,
+          }),
+        );
+        this.votes.set(id, new Map());
+        this.announce("notice", {
+          type: "proposalCreated",
+          name: player.name,
+          key,
+        });
+      },
+    );
 
     this.onMessage("vote", clientMessages.vote, (client, { id, approve }) => {
       const player = this.state.players.get(client.sessionId);
@@ -213,34 +386,52 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       proposal.votesAgainst = votes.size - approvals;
     });
 
-    this.onMessage("resolveProposal", clientMessages.resolveProposal, (client, { id, accept }) => {
-      if (!this.requireHost(client)) return;
-      const proposal = this.state.proposals.get(id);
-      if (!proposal) return;
-      this.state.proposals.delete(id);
-      this.votes.delete(id);
-      // La proposition a pu devenir invalide depuis (ex. capacité sous le nombre de joueurs présents).
-      const applied = accept && this.applyChange(proposal.key, JSON.parse(proposal.value));
-      if (accept && !applied) this.refuse(client, "INVALID", "Cette proposition n'est plus applicable.");
-      this.announce("notice", { type: "proposalResolved", key: proposal.key, accepted: applied });
-    });
+    this.onMessage(
+      "resolveProposal",
+      clientMessages.resolveProposal,
+      (client, { id, accept }) => {
+        if (!this.requireHost(client)) return;
+        const proposal = this.state.proposals.get(id);
+        if (!proposal) return;
+        this.state.proposals.delete(id);
+        this.votes.delete(id);
+        // La proposition a pu devenir invalide depuis (ex. capacité sous le nombre de joueurs présents).
+        const applied =
+          accept && this.applyChange(proposal.key, JSON.parse(proposal.value));
+        if (accept && !applied)
+          this.refuse(
+            client,
+            "INVALID",
+            "Cette proposition n'est plus applicable.",
+          );
+        this.announce("notice", {
+          type: "proposalResolved",
+          key: proposal.key,
+          accepted: applied,
+        });
+      },
+    );
 
     // Lancement : l'hôte démarre un compte à rebours, annulé si les conditions ne tiennent plus.
     this.onMessage("start", clientMessages.start, (client) => {
       if (!this.requireHost(client) || this.state.phase !== "waiting") return;
-      const blocker = launchBlocker(this.game, [...this.state.players.values()]);
+      const blocker = launchBlocker(this.game, [
+        ...this.state.players.values(),
+      ]);
       if (blocker) return this.refuse(client, "INVALID", blocker);
       this.state.phase = "countdown";
       this.state.countdown = LAUNCH_COUNTDOWN_SECONDS;
       void this.syncMetadata();
       this.launchTimer = this.clock.setInterval(() => {
-        if (launchBlocker(this.game, [...this.state.players.values()])) return this.cancelLaunch();
+        if (launchBlocker(this.game, [...this.state.players.values()]))
+          return this.cancelLaunch();
         if (--this.state.countdown === 0) this.beginGame();
       }, tuning.tickMs);
     });
 
     this.onMessage("cancelStart", clientMessages.cancelStart, (client) => {
-      if (this.requireHost(client) && this.state.phase === "countdown") this.cancelLaunch();
+      if (this.requireHost(client) && this.state.phase === "countdown")
+        this.cancelLaunch();
     });
 
     this.onMessage("backToLobby", clientMessages.backToLobby, (client) => {
@@ -250,9 +441,14 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       void this.syncMetadata();
     });
 
-    this.onMessage("bjAction", clientMessages.bjAction, (client, { action }) => {
-      if (!this.blackjack?.action(client.sessionId, action)) this.refuse(client, "INVALID", "Ce n'est pas votre tour.");
-    });
+    this.onMessage(
+      "bjAction",
+      clientMessages.bjAction,
+      (client, { action }) => {
+        if (!this.blackjack?.action(client.sessionId, action))
+          this.refuse(client, "INVALID", "Ce n'est pas votre tour.");
+      },
+    );
     this.onMessage("bjNext", clientMessages.bjNext, (client) => {
       if (this.requireHost(client)) this.blackjack?.next();
     });
@@ -260,25 +456,68 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       if (this.requireHost(client)) this.blackjack?.end();
     });
 
-    this.onMessage("report", clientMessages.report, (client, { sessionId, reason }) => {
-      const reporter = this.state.players.get(client.sessionId);
-      const target = this.state.players.get(sessionId);
-      if (!reporter || !target || reporter === target) return;
-      if (!this.reportAllowed(reporter.id)) return this.refuse(client, "RATE_LIMITED", "Trop de signalements, réessayez plus tard.");
-      // shortcut: journalisé seulement ; à stocker en base avec outil de modération (phase 6).
-      console.warn(JSON.stringify({ event: "report", room: this.roomId, reporter: reporter.id, target: target.id, targetName: target.name, reason, at: Date.now() }));
-    });
+    this.onMessage(
+      "report",
+      clientMessages.report,
+      (client, { sessionId, reason }) => {
+        const reporter = this.state.players.get(client.sessionId);
+        const target = this.state.players.get(sessionId);
+        if (!reporter || !target || reporter === target) return;
+        if (!this.reportAllowed(reporter.id))
+          return this.refuse(
+            client,
+            "RATE_LIMITED",
+            "Trop de signalements, réessayez plus tard.",
+          );
+        // shortcut: journalisé seulement ; à stocker en base avec outil de modération (phase 6).
+        console.warn(
+          JSON.stringify({
+            event: "report",
+            room: this.roomId,
+            reporter: reporter.id,
+            target: target.id,
+            targetName: target.name,
+            reason,
+            at: Date.now(),
+          }),
+        );
+      },
+    );
   }
 
-  async onAuth(_client: Client, _options: unknown, context: AuthContext): Promise<JoinAuth> {
+  async onAuth(
+    _client: Client,
+    _options: unknown,
+    context: AuthContext,
+  ): Promise<JoinAuth> {
     const identity = await verifyToken(context.token);
     if (!identity) throw new ServerError(401, JoinError.Unauthorized);
+    if (this.kicked.has(identity.id))
+      throw new ServerError(403, JoinError.Kicked);
     // Pas de spectateurs : on n'entre plus une fois le lancement engagé.
-    if (this.state.phase !== "waiting") throw new ServerError(403, JoinError.InProgress);
+    if (this.state.phase !== "waiting")
+      throw new ServerError(403, JoinError.InProgress);
     // Seuls les comptes ont un avatar et des objets de boutique ; les invités reçoivent l'apparence par défaut côté client.
-    if (identity.kind !== "user") return { ...identity, avatar: "", cosmetics: "{}", ownedEmotes: [] };
-    const [avatar, shop] = await Promise.all([fetchAvatar(identity.id), fetchCosmetics(identity.id)]);
-    return { ...identity, avatar, cosmetics: shop.cosmetics, ownedEmotes: shop.ownedEmotes };
+    if (identity.kind !== "user")
+      return {
+        ...identity,
+        avatar: "",
+        cosmetics: "{}",
+        color: "",
+        ownedEmotes: [],
+      };
+    const [avatar, shop, color] = await Promise.all([
+      fetchAvatar(identity.id),
+      fetchCosmetics(identity.id),
+      fetchColor(identity.id),
+    ]);
+    return {
+      ...identity,
+      avatar,
+      cosmetics: shop.cosmetics,
+      color,
+      ownedEmotes: shop.ownedEmotes,
+    };
   }
 
   onJoin(client: Client, _options: unknown, identity: JoinAuth) {
@@ -286,12 +525,11 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     // Une identité = un seul siège. Un siège déconnecté est remplacé, un siège actif bloque le doublon.
     for (const [sessionId, existing] of this.state.players) {
       if (existing.id !== identity.id) continue;
-      if (existing.connected) throw new ServerError(409, JoinError.AlreadyInRoom);
+      if (existing.connected)
+        throw new ServerError(409, JoinError.AlreadyInRoom);
       this.state.players.delete(sessionId);
       this.seats.get(sessionId)?.reject(new Error("replaced"));
     }
-    // Apparition sur un cercle autour du centre de la salle.
-    const angle = Math.random() * Math.PI * 2;
     this.state.players.set(
       client.sessionId,
       new Player({
@@ -302,14 +540,20 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
         connected: true,
         avatar: identity.avatar,
         cosmetics: identity.cosmetics,
-        x: Math.cos(angle) * LOBBY_SPAWN_RADIUS,
-        z: Math.sin(angle) * LOBBY_SPAWN_RADIUS,
+        color: identity.color,
+        x: ROOM_SPAWN.x + (Math.random() - 0.5) * 2 * ROOM_SPAWN.spread,
+        z: ROOM_SPAWN.z + (Math.random() - 0.5) * ROOM_SPAWN.spread,
         dx: 0,
         dz: 0,
+        run: false,
+        jump: false,
+        sit: false,
       }),
     );
     this.ensureHost();
-    if (identity.kind === "user") presence.setRoom(identity.id, "lobby", this.state.gameId);
+    this.announce("notice", { type: "playerJoined", name: identity.name });
+    if (identity.kind === "user")
+      presence.setRoom(identity.id, "lobby", this.state.gameId);
   }
 
   onDrop(client: Client) {
@@ -339,6 +583,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     if (leaving?.kind === "user") presence.clearRoom(leaving.id);
     this.state.players.delete(client.sessionId);
     this.blackjack?.removePlayer(client.sessionId);
+    if (leaving)
+      this.announce("notice", { type: "playerLeft", name: leaving.name });
     this.ensureHost();
   }
 
@@ -379,7 +625,9 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     const matchId = randomUUID(); // clé d'idempotence de l'enregistrement des résultats
     // Seul jeu disponible pour l'instant ; les suivants brancheront ici leur propre contrôleur.
     this.blackjack = new BlackjackGame(this.state.blackjack, this.clock, {
-      decisionSeconds: Number(parseSettings(this.state.settings).decisionSeconds),
+      decisionSeconds: Number(
+        parseSettings(this.state.settings).decisionSeconds,
+      ),
       onFinished: () => {
         this.blackjack = null;
         this.state.phase = "results";
@@ -395,15 +643,26 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     for (const player of this.state.players.values()) {
       if (player.dx === 0 && player.dz === 0) continue;
       const position = { x: player.x, z: player.z };
-      stepLobbyPosition(position, { x: player.dx, z: player.dz }, seconds);
+      const others = [...this.state.players.values()]
+        .filter((p) => p !== player)
+        .map((p) => ({ x: p.x, z: p.z }));
+      stepLobbyPosition(
+        position,
+        { x: player.dx, z: player.dz },
+        seconds,
+        player.run,
+        others,
+      );
       player.x = position.x;
       player.z = position.z;
     }
+    pushApart([...this.state.players.values()], seconds);
   }
 
   private setPresence(status: "lobby" | "playing") {
     for (const player of this.state.players.values()) {
-      if (player.kind === "user" && player.connected) presence.setRoom(player.id, status, this.state.gameId);
+      if (player.kind === "user" && player.connected)
+        presence.setRoom(player.id, status, this.state.gameId);
     }
   }
 
@@ -413,12 +672,29 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     const participants = table.flatMap(([sessionId, result]) => {
       const player = this.state.players.get(sessionId);
       if (player?.kind !== "user") return [];
-      const rank = 1 + table.filter(([, other]) => other.score > result.score).length;
-      return [{ user_id: player.id, rank, score: result.score, wins: result.wins, pushes: result.pushes, losses: result.losses }];
+      const rank =
+        1 + table.filter(([, other]) => other.score > result.score).length;
+      return [
+        {
+          user_id: player.id,
+          rank,
+          score: result.score,
+          wins: result.wins,
+          pushes: result.pushes,
+          losses: result.losses,
+        },
+      ];
     });
-    const rewards = await recordMatch(matchId, this.state.gameId, this.state.blackjack.round, participants);
+    const rewards = await recordMatch(
+      matchId,
+      this.state.gameId,
+      this.state.blackjack.round,
+      participants,
+    );
     for (const reward of rewards) {
-      const sessionId = [...this.state.players].find(([, player]) => player.id === reward.userId)?.[0];
+      const sessionId = [...this.state.players].find(
+        ([, player]) => player.id === reward.userId,
+      )?.[0];
       const client = sessionId ? this.clients.getById(sessionId) : undefined;
       client?.send("rewards", {
         xpGained: reward.xpGained,
@@ -433,22 +709,17 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
 
   private isValidChange(key: string, value: unknown): boolean {
     if (this.state.phase !== "waiting") return false; // règles verrouillées dès le lancement
-    return key === CAPACITY_KEY
-      ? isValidCapacity(this.game, value, this.state.players.size)
-      : isValidSetting(this.game, key, value);
+    return isValidSetting(this.game, key, value);
   }
 
   /** Applique un changement de règle validé et l'annonce. Renvoie false s'il est invalide. */
   private applyChange(key: string, value: unknown): boolean {
     if (!this.isValidChange(key, value)) return false;
-    if (key === CAPACITY_KEY) {
-      this.maxClients = value as number;
-      this.state.capacity = value as number;
-      this.announce("notice", { type: "capacityChanged", capacity: value as number });
-    } else {
-      this.state.settings = JSON.stringify({ ...parseSettings(this.state.settings), [key]: value });
-      this.announce("notice", { type: "settingChanged", key });
-    }
+    this.state.settings = JSON.stringify({
+      ...parseSettings(this.state.settings),
+      [key]: value,
+    });
+    this.announce("notice", { type: "settingChanged", key });
     return true;
   }
 
@@ -466,7 +737,8 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
       const changed = Boolean(previous) && previous !== sessionId; // pas d'annonce pour le premier hôte
       this.state.hostSessionId = sessionId;
       void this.syncMetadata();
-      if (changed) this.announce("notice", { type: "hostChanged", name: player.name });
+      if (changed)
+        this.announce("notice", { type: "hostChanged", name: player.name });
       return;
     }
   }
@@ -486,11 +758,18 @@ export class LobbyRoom extends Room<{ state: LobbyState; metadata: LobbyMetadata
     });
   }
 
-  private refuse(client: Client, code: ServerMessages["error"]["code"], message: string) {
+  private refuse(
+    client: Client,
+    code: ServerMessages["error"]["code"],
+    message: string,
+  ) {
     client.send("error", { code, message } satisfies ServerMessages["error"]);
   }
 
-  private announce<K extends keyof ServerMessages>(type: K, payload: ServerMessages[K]) {
+  private announce<K extends keyof ServerMessages>(
+    type: K,
+    payload: ServerMessages[K],
+  ) {
     this.broadcast(type, payload);
   }
 }

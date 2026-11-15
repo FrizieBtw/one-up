@@ -31,18 +31,18 @@ export function Button({
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div {...props} className={cx("rounded-chunk border-3 border-ink bg-white p-5 shadow-chunk", className)} />;
+  return <div {...props} className={cx("rounded-chunk border-3 border-ink bg-white p-5 text-ink shadow-chunk", className)} />;
 }
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={cx("w-full rounded-2xl border-3 border-ink bg-cream px-4 py-2 font-semibold placeholder:text-ink/40", className)}
+      className={cx("w-full rounded-2xl border-3 border-ink bg-cream px-4 py-2 font-semibold text-ink placeholder:text-ink/40", className)}
     />
   );
 }
 
 export function Badge({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return <span {...props} className={cx("rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-extrabold", className)} />;
+  return <span {...props} className={cx("rounded-full border-2 border-ink px-2.5 py-0.5 text-xs font-extrabold text-ink", className)} />;
 }

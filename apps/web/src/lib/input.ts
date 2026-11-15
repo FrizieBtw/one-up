@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PAD_INDEX, useKeybinds } from "./keybinds";
 
 // Couche d'entrées commune aux jeux : actions abstraites, lues depuis le clavier ou la manette.
 // Le clavier reste toujours utilisable ; la manette s'ajoute quand elle est branchée.
@@ -11,7 +12,9 @@ const pressed = new Set<string>();
 const DEADZONE = 0.25;
 
 const isTyping = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  target instanceof HTMLElement &&
+  (target.isContentEditable ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
 /** Première manette connectée. Aucune hypothèse sur son agencement au-delà des axes 0 et 1. */
 function activeGamepad(): Gamepad | null {
@@ -20,15 +23,54 @@ function activeGamepad(): Gamepad | null {
   return null;
 }
 
+/** Touche (ou bouton de manette) de course maintenue : le personnage court. Les deux Maj comptent pour la même. */
+export function isRunning(): boolean {
+  const { keys, pad } = useKeybinds.getState();
+  const code = keys.run;
+  if (
+    pressed.has(code) ||
+    (code.startsWith("Shift") &&
+      (pressed.has("ShiftLeft") || pressed.has("ShiftRight")))
+  )
+    return true;
+  const button = pad.run;
+  return (
+    button !== undefined &&
+    Boolean(activeGamepad()?.buttons[PAD_INDEX[button]]?.pressed)
+  );
+}
+
+let padJumpHeld = false;
+/** Vrai une seule fois à l'appui du bouton de saut de la manette (appelé à chaque image). */
+export function padJumpPressed(): boolean {
+  const button = useKeybinds.getState().pad.jump;
+  const down =
+    button !== undefined &&
+    Boolean(activeGamepad()?.buttons[PAD_INDEX[button]]?.pressed);
+  const edge = down && !padJumpHeld;
+  padJumpHeld = down;
+  return edge;
+}
+
+let padBackHeld = false;
+/** Vrai une seule fois à l'appui du bouton B de la manette (fermer une fenêtre). */
+export function padBackPressed(): boolean {
+  const down = Boolean(activeGamepad()?.buttons[PAD_INDEX.b]?.pressed);
+  const edge = down && !padBackHeld;
+  padBackHeld = down;
+  return edge;
+}
+
 /** Direction de déplacement, x vers la droite et z vers le bas de l'écran, norme au plus 1. */
 export function readMove(): { x: number; z: number } {
   let x = 0;
   let z = 0;
   // `code` désigne la touche physique : ZQSD sur AZERTY et WASD sur QWERTY donnent les mêmes codes.
-  if (pressed.has("KeyA") || pressed.has("ArrowLeft")) x -= 1;
-  if (pressed.has("KeyD") || pressed.has("ArrowRight")) x += 1;
-  if (pressed.has("KeyW") || pressed.has("ArrowUp")) z -= 1;
-  if (pressed.has("KeyS") || pressed.has("ArrowDown")) z += 1;
+  const { keys } = useKeybinds.getState();
+  if (pressed.has(keys.lf) || pressed.has("ArrowLeft")) x -= 1;
+  if (pressed.has(keys.rt) || pressed.has("ArrowRight")) x += 1;
+  if (pressed.has(keys.fw) || pressed.has("ArrowUp")) z -= 1;
+  if (pressed.has(keys.bk) || pressed.has("ArrowDown")) z += 1;
 
   const pad = activeGamepad();
   if (pad && x === 0 && z === 0) {
@@ -53,7 +95,9 @@ let previousButtons: boolean[] = [];
 /** Indices des boutons de manette qui viennent d'être enfoncés depuis le dernier appel. */
 export function readGamepadPresses(): number[] {
   const buttons = activeGamepad()?.buttons.map((b) => b.pressed) ?? [];
-  const fresh = buttons.flatMap((down, i) => (down && !previousButtons[i] ? [i] : []));
+  const fresh = buttons.flatMap((down, i) =>
+    down && !previousButtons[i] ? [i] : [],
+  );
   previousButtons = buttons;
   return fresh;
 }

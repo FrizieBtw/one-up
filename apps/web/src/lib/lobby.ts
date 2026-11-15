@@ -1,7 +1,12 @@
 "use client";
 
 import { Client, type Room } from "@colyseus/sdk";
-import { JoinError, LOBBY_ROOM_NAME, type CreateLobbyOptions, type PublicRoomInfo } from "@stepup/shared";
+import {
+  JoinError,
+  LOBBY_ROOM_NAME,
+  type CreateLobbyOptions,
+  type PublicRoomInfo,
+} from "@stepup/shared";
 import { GAME_SERVER_URL } from "./env";
 import { getAuthToken } from "./session";
 
@@ -15,10 +20,20 @@ const tokenKey = (code: string) => `stepup-reconnect-${code}`;
 
 function track(room: Room): Room {
   // Aide au débogage et aux tests de parcours ; absente du build de production.
-  if (process.env.NODE_ENV !== "production") (window as unknown as { __lobbyRoom?: Room }).__lobbyRoom = room;
-  const save = () => sessionStorage.setItem(tokenKey(room.roomId), room.reconnectionToken);
+  if (process.env.NODE_ENV !== "production")
+    (window as unknown as { __lobbyRoom?: Room }).__lobbyRoom = room;
+  const save = () =>
+    sessionStorage.setItem(tokenKey(room.roomId), room.reconnectionToken);
   save();
   room.onReconnect(save);
+  // Exclu par l'hôte : l'application te ramène à ta chambre (voir StepUpApp).
+  room.onMessage("kicked", () =>
+    window.dispatchEvent(new CustomEvent("stepup:kicked")),
+  );
+  // Chambre fermée par son hôte : même retour que l'exclusion, vers sa propre chambre.
+  room.onMessage("closed", () =>
+    window.dispatchEvent(new CustomEvent("stepup:kicked")),
+  );
   room.onLeave(() => {
     if (current?.code === room.roomId) current = null;
   });
@@ -31,7 +46,9 @@ async function authed(): Promise<void> {
   client.auth.token = token;
 }
 
-export async function createLobby(options: CreateLobbyOptions): Promise<string> {
+export async function createLobby(
+  options: CreateLobbyOptions,
+): Promise<string> {
   await leaveLobby();
   await authed();
   const room = track(await client.create(LOBBY_ROOM_NAME, options));
@@ -71,8 +88,12 @@ export async function leaveLobby(): Promise<void> {
   await leaving.room.then((room) => room.leave()).catch(() => {});
 }
 
-export async function fetchPublicRooms(gameId: string): Promise<PublicRoomInfo[]> {
-  const res = await fetch(`${GAME_SERVER_URL}/rooms?game=${encodeURIComponent(gameId)}`);
+export async function fetchPublicRooms(
+  gameId: string,
+): Promise<PublicRoomInfo[]> {
+  const res = await fetch(
+    `${GAME_SERVER_URL}/rooms?game=${encodeURIComponent(gameId)}`,
+  );
   if (!res.ok) throw new Error("Liste des salons indisponible.");
   return res.json();
 }
@@ -80,10 +101,16 @@ export async function fetchPublicRooms(gameId: string): Promise<PublicRoomInfo[]
 /** Traduit une erreur de jointure du serveur en message lisible. */
 export function describeJoinError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes(JoinError.Unauthorized)) return "Session expirée : reconnectez-vous depuis l'accueil.";
-  if (message.includes(JoinError.AlreadyInRoom)) return "Vous êtes déjà dans ce salon (autre onglet ?).";
-  if (message.includes(JoinError.InProgress)) return "La partie a déjà commencé.";
-  if (message.includes("not found")) return "Salon introuvable. Vérifiez le code.";
+  if (message.includes(JoinError.Unauthorized))
+    return "Session expirée : reconnectez-vous depuis l'accueil.";
+  if (message.includes(JoinError.Kicked))
+    return "Tu as été exclu de cette chambre.";
+  if (message.includes(JoinError.AlreadyInRoom))
+    return "Vous êtes déjà dans ce salon (autre onglet ?).";
+  if (message.includes(JoinError.InProgress))
+    return "La partie a déjà commencé.";
+  if (message.includes("not found"))
+    return "Salon introuvable. Vérifiez le code.";
   if (message.includes("locked")) return "Salon complet.";
   return "Connexion au salon impossible. Le serveur de jeu est-il démarré ?";
 }

@@ -1,11 +1,11 @@
 const INK = "#0f0d22";
 
 /** Logo avec le nom : la marque à gauche, « OneUP » en Outfit extra gras à droite. */
-export function LogoLockup({ className }: { className?: string }) {
+export function LogoLockup({ className, compact }: { className?: string; compact?: boolean }) {
   return (
     <span className={`inline-flex items-center gap-2.5 font-hud text-hud-ink ${className ?? ""}`}>
-      <LogoMark decorative className="h-[46px] w-auto" />
-      <span className="text-[32px] leading-none font-extrabold tracking-tight">
+      <LogoMark decorative className={compact ? "h-[34px] w-auto" : "h-[46px] w-auto"} />
+      <span className={`${compact ? "text-[24px]" : "text-[32px]"} relative -top-[0.02em] leading-none font-extrabold tracking-tight`}>
         One<span className="text-hud-accent">UP</span>
       </span>
     </span>
@@ -18,7 +18,7 @@ export function LogoLockup({ className }: { className?: string }) {
  */
 export function LogoMark({ className, decorative }: { className?: string; decorative?: boolean }) {
   return (
-    <svg viewBox="0 0 160 140" {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": "OneUP" })} className={className}>
+    <svg viewBox="0 2 160 129" {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": "OneUP" })} className={className}>
       <path
         d="M42 30C22 30 10 50 8 84C6 106 14 120 28 118C42 116 50 104 56 94L104 94C110 104 118 116 132 118C146 120 154 106 152 84C150 50 138 30 118 30Z"
         fill="#b9a3f5"

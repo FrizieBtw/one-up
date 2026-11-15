@@ -6,5 +6,6 @@ import type { BrowserContext } from "@playwright/test";
  * expirer les fenêtres de temps. Le rendu des personnages est couvert par avatarAssembly.spec.ts et avatarAnim.spec.ts.
  */
 export async function noAvatarModels(context: BrowserContext) {
-  await context.route("**/models/kaykit/**", (route) => route.abort());
+  // Seuls les personnages et leurs animations sont bloqués : le décor (props, meubles) doit se charger, la page en dépend.
+  await context.route(/\/models\/kaykit\/(characters|animations)\//, (route) => route.abort());
 }

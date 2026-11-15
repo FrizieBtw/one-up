@@ -51,11 +51,11 @@
 }
 
 body {
-  background-color: var(--color-cream);
-  /* Trame de points façon emballage de cartouche */
-  background-image: radial-gradient(var(--color-cream-deep) 2px, transparent 2px);
-  background-size: 24px 24px;
-  color: var(--color-ink);
+  /* Interface de jeu : pas de sélection de texte (les champs de saisie restent sélectionnables). */
+  user-select: none;
+  -webkit-user-select: none;
+  background-color: var(--color-night);
+  color: #fff;
   font-family: var(--font-sans);
 }
 
@@ -105,4 +105,65 @@ button:not(:disabled),
 }
 .rise-in {
   animation: rise-in 0.4s ease-out backwards;
+}
+
+/* Message de chat éphémère : apparaît en glissant, reste visible, puis s'efface en fondu (7 s au total, comme la maquette). */
+@keyframes chat-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  8% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.chat-fade {
+  animation: chat-fade 7s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-fade {
+    animation-name: none;
+  }
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Barre de défilement discrète, partout (comme dans les maquettes) : curseur lavande arrondi sur fond transparent. */
+/* Chromium ignore les ::-webkit-scrollbar dès que scrollbar-width est défini (et remet alors les flèches) : les propriétés standard ne servent qu'aux autres navigateurs. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d6d2ee transparent;
+  }
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+/* Marges haut et bas : la barre s'arrête avant les coins arrondis des fenêtres. */
+*::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 14px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d6d2ee;
+  background-clip: padding-box;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }

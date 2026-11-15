@@ -71,11 +71,11 @@ function FloatingProp({ prop, still }: { prop: Prop; still: boolean }) {
   );
 }
 
-export default function LoginDecor() {
+export default function LoginDecor({ className = "!absolute inset-0" }: { className?: string }) {
   const still = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   return (
     // Mouvement réduit : une seule image fixe, pas de rendu continu.
-    <Canvas orthographic frameloop={still ? "demand" : "always"} camera={{ zoom: 90, position: [0, 0, 10] }} dpr={[1, 2]} aria-hidden className="!absolute inset-0">
+    <Canvas orthographic frameloop={still ? "demand" : "always"} camera={{ zoom: 90, position: [0, 0, 10] }} dpr={[1, 2]} aria-hidden className={className}>
       <ambientLight intensity={1.1} />
       <directionalLight position={[-1, 2, 3]} intensity={1.4} />
       <Suspense fallback={null}>

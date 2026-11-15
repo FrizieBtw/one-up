@@ -2,7 +2,13 @@
 
 import { useMemo } from "react";
 import { create } from "zustand";
-import { EMOTES, cosmeticsFromEquipped, ownedEmoteIds, type AvatarCosmetics, type InventoryEntry } from "@stepup/shared";
+import {
+  EMOTES,
+  cosmeticsFromEquipped,
+  ownedEmoteIds,
+  type AvatarCosmetics,
+  type InventoryEntry,
+} from "@stepup/shared";
 import { supabase } from "./session";
 
 // Jetons, boutique, inventaire, missions. Lecture sous RLS ; achats, équipement et aide de reprise passent par des
@@ -23,7 +29,8 @@ function one<T>(result: Result<T>): T | null {
   return result.data;
 }
 
-export type ShopCategory = "outfit" | "accessory" | "emote" | "cartridge" | "decoration";
+export type ShopCategory =
+  "outfit" | "accessory" | "emote" | "cartridge" | "decoration";
 
 export const CATEGORY_LABELS: Record<ShopCategory, string> = {
   outfit: "Tenues",
@@ -63,35 +70,43 @@ export interface Mission {
   completed: boolean;
 }
 
-export interface RecoveryRules {
-  threshold: number;
-  amount: number;
-  cooldownHours: number;
-}
-
-export type PurchaseOutcome = "ok" | "not_found" | "already_owned" | "insufficient";
-export type RecoveryOutcome = "ok" | "not_eligible" | "cooldown";
+export type PurchaseOutcome =
+  "ok" | "not_found" | "already_owned" | "insufficient";
 
 const DAY_MS = 86_400_000;
 /** Période (jour UTC) des missions quotidiennes ; les défis uniques utilisent une date fixe côté base. */
-const utcDay = () => new Date(Math.floor(Date.now() / DAY_MS) * DAY_MS).toISOString().slice(0, 10);
+const utcDay = () =>
+  new Date(Math.floor(Date.now() / DAY_MS) * DAY_MS).toISOString().slice(0, 10);
 const CHALLENGE_PERIOD = "2000-01-01";
 
 export const loadShop = async (): Promise<ShopItem[]> =>
-  rows(await db().from("shop_items").select("id, category, name, description, price, payload").order("price")) as ShopItem[];
+  rows(
+    await db()
+      .from("shop_items")
+      .select("id, category, name, description, price, payload")
+      .order("price"),
+  ) as ShopItem[];
 
-export async function loadWallet(userId: string): Promise<{ balance: number; transactions: Transaction[]; rules: RecoveryRules }> {
+export async function loadWallet(
+  userId: string,
+): Promise<{ balance: number; transactions: Transaction[] }> {
   const client = db();
-  const [wallet, transactions, settings] = await Promise.all([
-    client.from("wallets").select("balance").eq("user_id", userId).maybeSingle(),
-    client.from("wallet_transactions").select("id, amount, balance_after, kind, ref, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(30),
-    client.from("economy_settings").select("recovery_threshold, recovery_amount, recovery_cooldown_hours").maybeSingle(),
+  const [wallet, transactions] = await Promise.all([
+    client
+      .from("wallets")
+      .select("balance")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    client
+      .from("wallet_transactions")
+      .select("id, amount, balance_after, kind, ref, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(30),
   ]);
-  const s = one(settings);
   return {
     balance: one(wallet)?.balance ?? 0,
     transactions: rows(transactions) as Transaction[],
-    rules: { threshold: s?.recovery_threshold ?? 20, amount: s?.recovery_amount ?? 100, cooldownHours: s?.recovery_cooldown_hours ?? 24 },
   };
 }
 
@@ -100,32 +115,56 @@ export interface OwnedItem {
   equipped: boolean;
 }
 export const loadInventory = async (userId: string): Promise<OwnedItem[]> =>
-  rows(await db().from("user_inventory").select("item_id, equipped").eq("user_id", userId)).map((row) => ({ itemId: row.item_id, equipped: row.equipped }));
+  rows(
+    await db()
+      .from("user_inventory")
+      .select("item_id, equipped")
+      .eq("user_id", userId),
+  ).map((row) => ({ itemId: row.item_id, equipped: row.equipped }));
 
 export async function loadMissions(userId: string): Promise<Mission[]> {
   const client = db();
   const [missions, progress] = await Promise.all([
-    client.from("missions").select("id, kind, title, description, game_id, target, reward").order("reward"),
-    client.from("mission_progress").select("mission_id, period, progress, completed").eq("user_id", userId),
+    client
+      .from("missions")
+      .select("id, kind, title, description, game_id, target, reward")
+      .order("reward"),
+    client
+      .from("mission_progress")
+      .select("mission_id, period, progress, completed")
+      .eq("user_id", userId),
   ]);
   const today = utcDay();
-  const mine = new Map(rows(progress).map((p) => [`${p.mission_id}|${p.period}`, p]));
+  const mine = new Map(
+    rows(progress).map((p) => [`${p.mission_id}|${p.period}`, p]),
+  );
   return rows(missions).map((m) => {
-    const p = mine.get(`${m.id}|${m.kind === "daily" ? today : CHALLENGE_PERIOD}`);
-    return { ...m, progress: p?.progress ?? 0, completed: p?.completed ?? false } as Mission;
+    const p = mine.get(
+      `${m.id}|${m.kind === "daily" ? today : CHALLENGE_PERIOD}`,
+    );
+    return {
+      ...m,
+      progress: p?.progress ?? 0,
+      completed: p?.completed ?? false,
+    } as Mission;
   });
 }
 
 /** Titres des missions accomplies (écran de résultats). */
 export async function loadMissionTitles(ids: string[]): Promise<string[]> {
   if (ids.length === 0 || !supabase) return [];
-  const found = rows(await supabase.from("missions").select("id, title").in("id", ids));
+  const found = rows(
+    await supabase.from("missions").select("id, title").in("id", ids),
+  );
   return ids.map((id) => found.find((m) => m.id === id)?.title ?? id);
 }
 
-export const purchaseItem = async (itemId: string) => one(await db().rpc("purchase_item", { p_item: itemId })) as PurchaseOutcome;
-export const setItemEquipped = async (itemId: string, equipped: boolean) => one(await db().rpc("set_equipped", { p_item: itemId, p_equipped: equipped })) as boolean;
-export const claimRecovery = async () => one(await db().rpc("claim_recovery")) as RecoveryOutcome;
+export const purchaseItem = async (itemId: string) =>
+  one(await db().rpc("purchase_item", { p_item: itemId })) as PurchaseOutcome;
+export const setItemEquipped = async (itemId: string, equipped: boolean) =>
+  one(
+    await db().rpc("set_equipped", { p_item: itemId, p_equipped: equipped }),
+  ) as boolean;
 
 // ---------- État partagé : solde, objets possédés et équipés ----------
 
@@ -148,7 +187,11 @@ export const useEconomy = create<EconomyState>((set, get) => ({
     const id = userId ?? get().userId;
     if (!id || !supabase) return;
     try {
-      const [shop, inventory, wallet] = await Promise.all([get().shop.length ? Promise.resolve(get().shop) : loadShop(), loadInventory(id), loadWallet(id)]);
+      const [shop, inventory, wallet] = await Promise.all([
+        get().shop.length ? Promise.resolve(get().shop) : loadShop(),
+        loadInventory(id),
+        loadWallet(id),
+      ]);
       set({ userId: id, shop, inventory, balance: wallet.balance });
     } catch {
       // réseau ou base indisponible : on garde l'état précédent
@@ -157,7 +200,10 @@ export const useEconomy = create<EconomyState>((set, get) => ({
   reset: () => set({ userId: null, balance: null, inventory: [] }),
 }));
 
-const entries = (state: Pick<EconomyState, "shop" | "inventory">, only?: (item: OwnedItem) => boolean): InventoryEntry[] =>
+const entries = (
+  state: Pick<EconomyState, "shop" | "inventory">,
+  only?: (item: OwnedItem) => boolean,
+): InventoryEntry[] =>
   state.inventory
     .filter((owned) => (only ? only(owned) : true))
     .flatMap((owned) => {
@@ -166,17 +212,30 @@ const entries = (state: Pick<EconomyState, "shop" | "inventory">, only?: (item: 
     });
 
 /** Apparence issue des objets équipés (tenue premium, accessoire, effet). */
-export const equippedCosmetics = (state: Pick<EconomyState, "shop" | "inventory">): AvatarCosmetics =>
+export const equippedCosmetics = (
+  state: Pick<EconomyState, "shop" | "inventory">,
+): AvatarCosmetics =>
   cosmeticsFromEquipped(entries(state, (owned) => owned.equipped));
 
 /** Charge utile de l'objet équipé d'une catégorie (fini de cartouche, cadre de profil). */
-export function equippedPayload(state: Pick<EconomyState, "shop" | "inventory">, category: ShopCategory): Record<string, unknown> | null {
-  const owned = state.inventory.find((o) => o.equipped && state.shop.find((s) => s.id === o.itemId)?.category === category);
-  return owned ? (state.shop.find((s) => s.id === owned.itemId)?.payload ?? null) : null;
+export function equippedPayload(
+  state: Pick<EconomyState, "shop" | "inventory">,
+  category: ShopCategory,
+): Record<string, unknown> | null {
+  const owned = state.inventory.find(
+    (o) =>
+      o.equipped &&
+      state.shop.find((s) => s.id === o.itemId)?.category === category,
+  );
+  return owned
+    ? (state.shop.find((s) => s.id === owned.itemId)?.payload ?? null)
+    : null;
 }
 
 /** Emotes utilisables : les gratuites, plus celles de boutique que le compte possède. */
-export function availableEmotes(state: Pick<EconomyState, "shop" | "inventory">) {
+export function availableEmotes(
+  state: Pick<EconomyState, "shop" | "inventory">,
+) {
   const owned = new Set(ownedEmoteIds(entries(state)));
   return EMOTES.filter((emote) => !("item" in emote) || owned.has(emote.id));
 }
@@ -186,7 +245,10 @@ export function availableEmotes(state: Pick<EconomyState, "shop" | "inventory">)
 export function useEquippedCosmetics(): AvatarCosmetics {
   const shop = useEconomy((s) => s.shop);
   const inventory = useEconomy((s) => s.inventory);
-  return useMemo(() => equippedCosmetics({ shop, inventory }), [shop, inventory]);
+  return useMemo(
+    () => equippedCosmetics({ shop, inventory }),
+    [shop, inventory],
+  );
 }
 
 export function useAvailableEmotes() {

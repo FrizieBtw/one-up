@@ -4,8 +4,21 @@
 export type SettingValue = number | boolean | string;
 
 export type SettingDef =
-  | { key: string; label: string; type: "select"; options: { value: number | string; label: string }[]; default: number | string }
-  | { key: string; label: string; type: "int"; min: number; max: number; default: number }
+  | {
+      key: string;
+      label: string;
+      type: "select";
+      options: { value: number | string; label: string }[];
+      default: number | string;
+    }
+  | {
+      key: string;
+      label: string;
+      type: "int";
+      min: number;
+      max: number;
+      default: number;
+    }
   | { key: string; label: string; type: "bool"; default: boolean };
 
 export interface GameDefinition {
@@ -21,7 +34,7 @@ export interface GameDefinition {
 export const GAMES = [
   {
     id: "blackjack",
-    title: "Blackjack Battle",
+    title: "Blackjack",
     tagline: "Battez le croupier, grimpez au classement.",
     status: "available",
     minPlayers: 1,
@@ -44,9 +57,28 @@ export const GAMES = [
     minPlayers: 1,
     maxPlayers: 8,
     settings: [
-      { key: "laps", label: "Nombre de tours", type: "int", min: 1, max: 10, default: 3 },
-      { key: "collisions", label: "Collisions entre joueurs", type: "bool", default: true },
-      { key: "bots", label: "Nombre de bots", type: "int", min: 0, max: 7, default: 0 },
+      {
+        key: "laps",
+        label: "Nombre de tours",
+        type: "int",
+        min: 1,
+        max: 10,
+        default: 3,
+      },
+      {
+        key: "collisions",
+        label: "Collisions entre joueurs",
+        type: "bool",
+        default: true,
+      },
+      {
+        key: "bots",
+        label: "Nombre de bots",
+        type: "int",
+        min: 0,
+        max: 7,
+        default: 0,
+      },
       {
         key: "trackMode",
         label: "Sélection du circuit",
@@ -78,7 +110,14 @@ export const GAMES = [
         ],
         default: "board",
       },
-      { key: "turns", label: "Nombre de tours", type: "int", min: 5, max: 30, default: 10 },
+      {
+        key: "turns",
+        label: "Nombre de tours",
+        type: "int",
+        min: 5,
+        max: 30,
+        default: 10,
+      },
     ],
   },
 ] as const satisfies readonly GameDefinition[];
@@ -90,18 +129,29 @@ export function getGame(id: string): GameDefinition | undefined {
   return GAMES.find((g) => g.id === id);
 }
 
-export function defaultSettings(game: GameDefinition): Record<string, SettingValue> {
+export function defaultSettings(
+  game: GameDefinition,
+): Record<string, SettingValue> {
   return Object.fromEntries(game.settings.map((s) => [s.key, s.default]));
 }
 
-export function isValidSetting(game: GameDefinition, key: string, value: unknown): value is SettingValue {
+export function isValidSetting(
+  game: GameDefinition,
+  key: string,
+  value: unknown,
+): value is SettingValue {
   const def = game.settings.find((s) => s.key === key);
   if (!def) return false;
   switch (def.type) {
     case "select":
       return def.options.some((o) => o.value === value);
     case "int":
-      return typeof value === "number" && Number.isInteger(value) && value >= def.min && value <= def.max;
+      return (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        value >= def.min &&
+        value <= def.max
+      );
     case "bool":
       return typeof value === "boolean";
   }
@@ -109,21 +159,17 @@ export function isValidSetting(game: GameDefinition, key: string, value: unknown
 
 /**
  * Raison empêchant l'hôte de lancer la partie, ou null si le lancement est permis.
- * Seuls les joueurs connectés comptent ; il faut une majorité stricte de joueurs prêts.
+ * Seuls les joueurs connectés comptent ; il n'y a plus de statut « prêt » : l'hôte décide.
  */
-export function launchBlocker(game: GameDefinition, players: readonly { ready: boolean; connected: boolean }[]): string | null {
+export function launchBlocker(
+  game: GameDefinition,
+  players: readonly { connected: boolean }[],
+): string | null {
   if (game.status !== "available") return "Ce jeu n'est pas encore disponible.";
   const present = players.filter((p) => p.connected);
-  if (present.length < game.minPlayers) return `Il faut au moins ${game.minPlayers} joueurs.`;
-  if (present.filter((p) => p.ready).length * 2 <= present.length) return "Plus de la moitié des joueurs doivent être prêts.";
+  if (present.length < game.minPlayers)
+    return `Il faut au moins ${game.minPlayers} joueurs.`;
+  if (present.length > game.maxPlayers)
+    return `Ce jeu accepte ${game.maxPlayers} joueurs au maximum.`;
   return null;
-}
-
-export function isValidCapacity(game: GameDefinition, capacity: unknown, currentPlayers = 0): capacity is number {
-  return (
-    typeof capacity === "number" &&
-    Number.isInteger(capacity) &&
-    capacity >= Math.max(game.minPlayers, currentPlayers) &&
-    capacity <= game.maxPlayers
-  );
 }

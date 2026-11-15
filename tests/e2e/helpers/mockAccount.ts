@@ -12,10 +12,10 @@ export function supabaseUrl(): string | null {
   }
 }
 
-export const ME = { id: "11111111-1111-4111-8111-111111111111", username: "Zoé_Test", public_id: "ZOE12345" };
-export const BOB = { id: "22222222-2222-4222-8222-222222222222", username: "Bob_Ami", public_id: "BOB12345" };
-export const CAROL = { id: "33333333-3333-4333-8333-333333333333", username: "Carol_Demande", public_id: "CAR12345" };
-export const DAN = { id: "44444444-4444-4444-8444-444444444444", username: "Dan_Inconnu", public_id: "DAN12345" };
+export const ME = { id: "11111111-1111-4111-8111-111111111111", username: "Zoé_Test" };
+export const BOB = { id: "22222222-2222-4222-8222-222222222222", username: "Bob_Ami" };
+export const CAROL = { id: "33333333-3333-4333-8333-333333333333", username: "Carol_Demande" };
+export const DAN = { id: "44444444-4444-4444-8444-444444444444", username: "Dan_Inconnu" };
 
 export const SHOP = [
   { id: "outfit_gold", category: "outfit", name: "Tenue de paladin", description: "Une armure qui brille.", price: 250, payload: { outfit: "Paladin" } },
@@ -109,14 +109,6 @@ export async function mockAccount(page: Page, url: string) {
       owned.equipped = body.p_equipped;
       return json(route, true);
     }
-    if (table === "rpc/claim_recovery") {
-      if (db.balance >= 20) return json(route, "not_eligible");
-      if (db.claimed > 0) return json(route, "cooldown");
-      db.claimed++;
-      db.balance += 100;
-      db.tx.unshift({ id: `t${db.tx.length}`, amount: 100, balance_after: db.balance, kind: "recovery", ref: "r", created_at: new Date().toISOString() });
-      return json(route, "ok");
-    }
     if (table === "rpc/remove_friend") {
       db.friendships = db.friendships.filter((f) => f.user_b !== body.p_other);
       return json(route, null, 204);
@@ -151,8 +143,6 @@ export async function mockAccount(page: Page, url: string) {
         return reply([{ game_id: "blackjack", sessions_played: 3, sessions_won: 1, rounds_won: 7, rounds_pushed: 1, rounds_lost: 4, total_score: 22 }]);
       case "wallets":
         return reply([{ balance: db.balance }]);
-      case "economy_settings":
-        return reply([{ recovery_threshold: 20, recovery_amount: 100, recovery_cooldown_hours: 24 }]);
       case "wallet_transactions":
         return reply(db.tx);
       case "shop_items":

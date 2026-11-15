@@ -8,7 +8,7 @@ Cahier des charges : prompt maître du porteur de projet (23 sections). Architec
 - **Phase 1 — Fondations** : terminée ; comptes Supabase configurés (projet hébergé `OneUP`), inscription et connexion réelles non testées.
 - **Phase 2 — Accueil et cartouches** : terminée. Sons de cartouche non faits.
 - **Phase 3 — Lobbies sociaux** : terminée.
-- **Phase 4 — Blackjack Battle** : terminée ; enregistrement des résultats vérifié en SQL et côté serveur (simulé), pas encore de bout en bout avec un vrai compte.
+- **Phase 4 — Blackjack** : terminée ; enregistrement des résultats vérifié en SQL et côté serveur (simulé), pas encore de bout en bout avec un vrai compte.
 - **Phase 5 — Console et transitions** : terminée.
 - **Phase 6 — Profils et progression** : terminée, sauf les invitations de salon entre amis et l'historique de parties affiché.
   L'enregistrement d'avatar a été confirmé par le porteur avec un vrai compte.
@@ -38,8 +38,31 @@ Palette « Nuit douce », panneaux 2D blancs plats et arrondis (Outfit), titres 
   Les écrans non refaits gardent l'ancien système. Parcours de test invité : `tests/e2e/helpers/guestLogin.ts`.
 - **Non fait dans la connexion** : connexion par pseudo (seule l'adresse e-mail identifie un compte ; il faut un appel serveur dédié, sans exposer les e-mails),
   pseudo unique (contrainte et vérification en base), logos Google et Discord officiels.
-- **Reste à faire** : barre d'en-tête (logo, onglets, profil), chambre isométrique et hologrammes, éditeur d'avatar au miroir, boutique en liste défilante avec rotation,
-  paramètres (dont Commandes), écran de profil (missions, succès, classement Elo, social, historique), écran console. Chaque tranche remplace un écran de l'ancien système.
+- **Tranche 2 (faite) : en-tête.** `HudHeader` (logo, onglets Chambre / Boutique / Paramètres, encart profil avec niveau et jetons).
+- **Tranche 3 (faite) : écrans HUD.** Paramètres à sections (Son, Commandes, Confidentialité pour les comptes, Compte) ; profil à navigation latérale
+  (Profil, Missions, Succès, Classement avec podium, Social, Historique, Inventaire) ; boutique en une liste défilante par catégorie (onglet Boutique de l'en-tête) ;
+  éditeur d'avatar (depuis « Modifier mon avatar » du profil) ; dos de cartouche en style HUD avec code du salon en cases. La section du profil vit dans `useNav.profileTab`.
+- **Écarts avec les maquettes (données absentes côté serveur)** : classement par XP et non par Elo (pas de moteur Elo) ; pas de bouton « Réclamer » sur les succès (récompenses automatiques) ;
+  pas de minuteur de renouvellement des missions ni de rotation de boutique ; amis sans « Rejoindre / Regarder » ; code du salon à 6 caractères (maquette : 4) ;
+  avatar de l'encart = initiale pastel (pas de buste 3D) ; avatar éditable dans un panneau et non devant le miroir (la chambre n'existe pas encore).
+- **Tranche 4 (faite) : chambre.** Accueil = `RoomScreen` (`room/RoomScene.tsx`, canvas orthographique en diagonale : damier, deux murs, meubles KayKit
+  cernés : bureau, écran, console rétro avec cartouche et manette, miroir (cadre)). L'avatar se déplace au clavier (ZQSD / WASD / flèches) ou au joystick ;
+  collisions sur le bureau et le miroir. Près d'un meuble, une bulle « Appuyez sur E » (ou bouton A) ouvre l'écran : console → Console, miroir → éditeur d'avatar (comptes).
+  Décor flottant (props KayKit) derrière, désactivable dans Paramètres > Affichage. Vue `room` dans `useNav` (`goHome` y revient, `openConsole` ouvre la Console).
+- **Tranche 5 (faite) : écrans en panneaux sur la chambre, fidèles aux maquettes.** `HudOverlay` : la chambre reste visible derrière Console, Profil, Boutique et Paramètres.
+  - Console (`ConsoleScreen`) : « Lancer une partie » (cartouches plates, pastilles Kenney `InfoBadge` joueurs / durée / difficulté, règles, réglage du temps de décision, « Lancer la partie ») et
+    « Rejoindre un groupe » (code de **4** caractères en cases portrait, chambres ouvertes). `ROOM_CODE_LENGTH` passe de 6 à 4.
+  - Boutique : grille de cartes, minuteur « Nouvelle sélection dans… » (compte à rebours jusqu'à minuit UTC), détail à droite (Acheter · prix, Équiper / Retirer, Essayer au miroir).
+  - Profil : navigation Profil / Missions / Succès / Classement / Social / Historique ; tuiles de statistiques, missions avec minuteur et statut, succès en lignes, podium.
+  - Paramètres : Son, Commandes (touches remappables clavier et manette, `lib/keybinds.ts`), Confidentialité (enregistrée à chaque changement), Compte, Chambre (accès, joueurs max).
+  - Éditeur d'avatar (`AvatarStudio`) : plein écran devant la chambre, catégories à gauche, options à droite, Annuler / Valider en bas.
+  - Chambre : chat éphémère (local), infos en bas à droite (Privée / Ouverte, joueurs).
+- **Écarts avec les maquettes (données ou serveur absents)** : classement par XP et non par Elo ; pas de récompense de succès ni de bouton « Réclamer » (les missions sont versées automatiquement : « Réclamé » = terminée) ;
+  la rotation de la boutique n'existe pas (le minuteur compte jusqu'à minuit UTC mais tout le catalogue reste en vente) ; pas de meubles ni de « Poser dans la chambre » ; amis sans « Rejoindre / Regarder » ;
+  historique de jetons et non de parties (pas de delta Elo) ; Compte sans « Modifier » ni « Supprimer mon compte » ; réglages Musique et « Messages du chat à l'écran » sans effet réel (pas de musique, chat local) ;
+  chambre solo : le chat n'est entendu que du joueur, pas de code de chambre ni de « Quitter », « Inviter » absent ; avatar de l'encart = initiale pastel ; écran « Console » : liste de chambres ouvertes
+  limitée aux salons publics du serveur de jeu.
+- **À faire** : chambre partagée (le lobby devient la chambre : joueurs visibles, chat partagé, hôte qui lance, invités qui proposent un jeu), meubles de boutique, Elo, écrans de salon et de jeu au style HUD.
 - Non vérifié : recoloration des vêtements (seules la peau et les cheveux sont recolorés) ; recomposition de pièces de têtes différentes sur un même crâne dans l'application (validée seulement sur un essai hors dépôt, avec cas ratés quand le classement se trompait).
 
 ## Ce qui fonctionne réellement (vérifié)
@@ -63,7 +86,7 @@ Palette « Nuit douce », panneaux 2D blancs plats et arrondis (Outfit), titres 
   Anti-spam : une proposition par joueur toutes les 10 s, cinq ouvertes au plus.
 - Lancement de partie : réservé à l'hôte, minimum de joueurs et majorité stricte de prêts, compte à rebours de 5 s annulable,
   annulé d'office si la majorité disparaît. Plus d'entrée dans le salon et règles verrouillées dès le compte à rebours.
-- Blackjack Battle jouable de bout en bout : distribution, tirer ou rester, as, naturel, croupier, tours séquentiels avec temps de décision,
+- Blackjack jouable de bout en bout : distribution, tirer ou rester, as, naturel, croupier, tours séquentiels avec temps de décision,
   repli automatique au chrono, score 3/1/0, manches illimitées, manche suivante automatique après 15 s, fin de session par l'hôte,
   écran de résultats, retour au lobby. Table 3D avec croupier, cartes animées, avatars, classement en direct, chat en jeu.
   Commandes clavier (T, R) et manette.
@@ -80,7 +103,7 @@ Palette « Nuit douce », panneaux 2D blancs plats et arrondis (Outfit), titres 
 - Amis : recherche par pseudo ou identifiant, demandes envoyées, reçues, acceptées, refusées, annulées, retrait, anti-spam (10 par heure, 30 en attente).
 - Présence : en ligne, dans un lobby, en partie (avec le jeu), pour les amis, selon les réglages de confidentialité de chacun.
 - Confidentialité : présence, statistiques et demandes d'ami réglables (tous, amis, personne).
-- Jetons : 200 à l'inscription, solde dans l'en-tête, jamais négatif, historique des transactions. Aide de reprise (sous 20 jetons, +100, une fois par 24 h).
+- Jetons : 200 à l'inscription, solde dans l'en-tête, jamais négatif, historique des transactions.
   Jetons de fin de session (10 + 2 par manche gagnée, plafond 150 par jour) versés par le serveur seul.
 - Missions : 3 quotidiennes (une partie, trois manches gagnées, première place) et 2 défis uniques (session parfaite, 10 sessions), progression et récompense
   calculées à l'enregistrement d'une session, versées une seule fois. Anti-abus : plafond quotidien, récompenses idempotentes, jamais déclarées par le client.

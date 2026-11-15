@@ -23,6 +23,7 @@ vi.mock("./auth", async (importOriginal) => {
 
 vi.mock("./persistence", () => ({
   fetchAvatar: async (userId: string) => (userId === "alice" ? AVATAR : ""),
+  fetchColor: async (userId: string) => (userId === "alice" ? "#6f5be0" : ""),
   // Alice : couronne et étincelles équipées, emote « Toupie » possédée. Bob : rien.
   fetchCosmetics: async (userId: string) =>
     userId === "alice" ? { cosmetics: JSON.stringify({ accessory: "cap" }), ownedEmotes: ["spin"] } : { cosmetics: "{}", ownedEmotes: [] },
@@ -88,6 +89,8 @@ describe("account features", () => {
       expect(players[bob.room.sessionId]!.avatar).toBe(""); // pas d'avatar : le client utilisera celui par défaut
       expect(JSON.parse(players[alice.room.sessionId]!.cosmetics)).toEqual({ accessory: "cap" });
       expect(players[bob.room.sessionId]!.cosmetics).toBe("{}");
+      expect(players[alice.room.sessionId]!.color).toBe("#6f5be0"); // couleur choisie, visible des autres joueurs
+      expect(players[bob.room.sessionId]!.color).toBe("");
 
       // Emotes de boutique : seul le propriétaire peut les jouer ; les gratuites restent ouvertes à tous.
       const emotes: any[] = [];

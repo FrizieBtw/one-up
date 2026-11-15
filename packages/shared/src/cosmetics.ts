@@ -21,7 +21,9 @@ export interface InventoryEntry {
 }
 
 const field = (payload: unknown, key: string): unknown =>
-  payload !== null && typeof payload === "object" ? (payload as Record<string, unknown>)[key] : undefined;
+  payload !== null && typeof payload === "object"
+    ? (payload as Record<string, unknown>)[key]
+    : undefined;
 
 /** Cosmétiques valides à partir d'un JSON ou d'un objet ; toute valeur inconnue est ignorée, jamais rejetée en bloc. */
 export function parseCosmetics(value: unknown): AvatarCosmetics {
@@ -35,13 +37,16 @@ export function parseCosmetics(value: unknown): AvatarCosmetics {
   const result: AvatarCosmetics = {};
   for (const key of ["outfit", "accessory"] as const) {
     const parsed = cosmeticsSchema.shape[key].safeParse(field(value, key));
-    if (parsed.success && parsed.data !== undefined) (result as Record<string, unknown>)[key] = parsed.data;
+    if (parsed.success && parsed.data !== undefined)
+      (result as Record<string, unknown>)[key] = parsed.data;
   }
   return result;
 }
 
 /** Apparence issue des objets équipés (un par catégorie au plus, garanti par la base). */
-export function cosmeticsFromEquipped(equipped: readonly InventoryEntry[]): AvatarCosmetics {
+export function cosmeticsFromEquipped(
+  equipped: readonly InventoryEntry[],
+): AvatarCosmetics {
   const raw: Record<string, unknown> = {};
   for (const { category, payload } of equipped) {
     if (category === "outfit") raw.outfit = field(payload, "outfit");

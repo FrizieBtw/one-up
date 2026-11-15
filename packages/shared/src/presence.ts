@@ -8,8 +8,13 @@ export interface PresenceEntry {
 }
 
 /** Ce que `viewer` voit de la présence de `target`, selon le réglage de `target`. Masquer renvoie « hors ligne ». */
-export function visiblePresence(entry: PresenceEntry, visibility: PresenceVisibility, viewerIsFriend: boolean): PresenceEntry {
-  const allowed = visibility === "everyone" || (visibility === "friends" && viewerIsFriend);
+export function visiblePresence(
+  entry: PresenceEntry,
+  visibility: PresenceVisibility,
+  viewerIsFriend: boolean,
+): PresenceEntry {
+  const allowed =
+    visibility === "everyone" || (visibility === "friends" && viewerIsFriend);
   return allowed ? entry : { userId: entry.userId, status: "offline" };
 }
 

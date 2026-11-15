@@ -45,7 +45,7 @@ export const tuning = {
 const ranks = (cards: Iterable<Card>) => [...cards].map((card) => ({ rank: card.rank as Rank }));
 
 /**
- * Partie de Blackjack Battle, autoritaire. Les joueurs jouent l'un après l'autre contre le croupier.
+ * Partie de Blackjack, autoritaire. Les joueurs jouent l'un après l'autre contre le croupier.
  * - Temps de décision écoulé (ou joueur déconnecté) : le joueur reste automatiquement, la table n'est jamais bloquée.
  * - Entre deux manches, l'hôte enchaîne ou termine ; sans décision, la manche suivante démarre seule.
  * - La carte cachée du croupier n'est jamais envoyée aux clients avant sa révélation.
@@ -117,8 +117,14 @@ export class BlackjackGame {
     this.ticker = null;
   }
 
+  /** Tire une carte ; avec beaucoup de joueurs le paquet peut s'épuiser, on le remplace alors par un paquet neuf. */
+  private pullCard(): RuleCard {
+    if (this.deck.length === 0) this.deck = tuning.deck();
+    return this.deck.shift()!;
+  }
+
   private draw(): Card {
-    return new Card(this.deck.shift()!);
+    return new Card(this.pullCard());
   }
 
   private startRound() {
@@ -134,7 +140,7 @@ export class BlackjackGame {
       player.status = isNatural(ranks(player.cards)) ? "blackjack" : "playing";
     }
     state.dealer.push(this.draw());
-    this.hidden = this.deck.shift()!;
+    this.hidden = this.pullCard();
     state.dealerHidden = true;
     state.stage = "playing";
     this.giveTurn(this.nextPlaying());

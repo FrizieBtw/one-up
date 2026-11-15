@@ -1,6 +1,6 @@
 import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { LOBBY_RADIUS, LOBBY_ROOM_NAME, LOBBY_SPAWN_RADIUS, LOBBY_SPEED, normalizeRoomCode, type LobbySnapshot, type PublicRoomInfo } from "@stepup/shared";
+import { LOBBY_ROOM_NAME, LOBBY_SPEED, ROOM_HALF, ROOM_SPAWN, normalizeRoomCode, type LobbySnapshot, type PublicRoomInfo } from "@stepup/shared";
 import { createDeck, type Card as RuleCard } from "@stepup/blackjack";
 import { server } from "./app";
 import { tuning } from "./games/blackjack";
@@ -100,19 +100,18 @@ describe("lobby room", () => {
     bob.room.send("setSetting", { key: "laps", value: 5 });
     alice.room.send("setSetting", { key: "laps", value: 99 });
     alice.room.send("setSetting", { key: "laps", value: 7 });
-    alice.room.send("setCapacity", { capacity: 1 }); // sous le nombre de joueurs présents
-    alice.room.send("setCapacity", { capacity: 4 });
     await settle();
     expect(bob.errors.map((e) => e.code)).toEqual(["FORBIDDEN"]);
-    expect(alice.errors.map((e) => e.code)).toEqual(["INVALID", "INVALID"]);
+    expect(alice.errors.map((e) => e.code)).toEqual(["INVALID"]);
     state = bob.snapshot();
     expect(JSON.parse(state.settings).laps).toBe(7);
-    expect(state.capacity).toBe(4);
+    expect(state.capacity).toBe(8);
     expect(state.players[bob.room.sessionId]!.ready).toBe(true);
-    expect(alice.notices).toEqual(bob.notices); // aucune annonce d'hôte à la création
-    expect(bob.notices).toEqual([
+    const withoutJoins = (list: any[]) => list.filter((n) => n.type !== "playerJoined");
+    expect(withoutJoins(alice.notices)).toEqual(withoutJoins(bob.notices)); // aucune annonce d'hôte à la création
+    expect(alice.notices).toContainEqual({ type: "playerJoined", name: "Bob" });
+    expect(withoutJoins(bob.notices)).toEqual([
       { type: "settingChanged", key: "laps" },
-      { type: "capacityChanged", capacity: 4 },
     ]);
 
     // Doublon de la même identité refusé
@@ -163,12 +162,67 @@ describe("lobby room", () => {
     await bob.room.leave();
   });
 
+  it("kicks a player quickly and bars them from coming back", async () => {
+    const alice = await create("Alice", { gameId: "blackjack", isPublic: false });
+    const bob = await joinByCode("Bob", alice.room.roomId);
+    await settle();
+    const bobSession = bob.room.sessionId;
+    let kickedAt = 0;
+    const timings: Record<string, number> = {};
+    bob.room.onMessage("kicked", () => (timings.message = Date.now() - kickedAt));
+    bob.room.onLeave(() => (timings.closed = Date.now() - kickedAt));
+    kickedAt = Date.now();
+    alice.room.send("kick", { sessionId: bobSession });
+    for (let i = 0; i < 100 && timings.closed === undefined; i++) await new Promise((r) => setTimeout(r, 10));
+    // Mesuré en local : le message d'exclusion et la fermeture arrivent en ~30 ms ; le joueur a déjà disparu de l'état de l'hôte.
+    expect(timings.closed).toBeLessThan(500);
+    for (let i = 0; i < 100 && alice.snapshot().players[bobSession]; i++) await new Promise((r) => setTimeout(r, 10)); // le patch d'état suit en ~50 ms
+    expect(alice.snapshot().players[bobSession]).toBeUndefined();
+    // Exclu pour de bon : impossible de revenir dans ce salon.
+    colyseus.sdk.auth.token = issueGuestToken("Bob").token;
+    await alice.room.leave();
+  });
+
+  it("shares the sitting posture and the creator's starting position", async () => {
+    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const bob = await joinByCode("Bob", alice.room.roomId);
+    await settle();
+    alice.room.send("spawnAt", { x: 1, z: -1 });
+    alice.room.send("sit", { sit: true });
+    await new Promise((r) => setTimeout(r, 300));
+    const seen = bob.snapshot().players[alice.room.sessionId]!;
+    expect(seen).toMatchObject({ x: 1, z: -1, sit: true });
+    alice.room.send("sit", { sit: false });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(bob.snapshot().players[alice.room.sessionId]!.sit).toBe(false);
+    await alice.room.leave();
+    await bob.room.leave();
+  });
+
+  it("lets only the host close the room: everyone is told and disconnected", async () => {
+    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const bob = await joinByCode("Bob", alice.room.roomId);
+    await settle();
+    let closed = false;
+    let left = false;
+    bob.room.onMessage("closed", () => (closed = true));
+    bob.room.onLeave(() => (left = true));
+    bob.room.send("closeRoom", {});
+    await settle();
+    expect(closed).toBe(false); // seul l'hôte peut fermer
+    alice.room.send("closeRoom", {});
+    for (let i = 0; i < 100 && !left; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(closed).toBe(true);
+    expect(left).toBe(true);
+  });
+
   it("simulates movement on the server: speed cap, room bounds, no client positions", async () => {
     const alice = await create("Alice", { gameId: "kart", isPublic: false });
     await settle();
     const me = () => alice.snapshot().players[alice.room.sessionId]!;
     const start = me();
-    expect(Math.hypot(start.x, start.z)).toBeCloseTo(LOBBY_SPAWN_RADIUS, 1);
+    expect(Math.abs(start.x - ROOM_SPAWN.x)).toBeLessThanOrEqual(ROOM_SPAWN.spread);
+    expect(Math.abs(start.z - ROOM_SPAWN.z)).toBeLessThanOrEqual(ROOM_SPAWN.spread);
 
     // Direction démesurée : normalisée, donc au plus LOBBY_SPEED unités par seconde.
     alice.room.send("move", { x: 1000, z: 0 });
@@ -176,12 +230,12 @@ describe("lobby room", () => {
     const moved = me();
     expect(moved.dx).toBeCloseTo(1);
     const travelled = moved.x - start.x;
-    expect(travelled).toBeGreaterThan(0.8);
+    expect(travelled).toBeGreaterThan(0.3);
     expect(travelled).toBeLessThan(LOBBY_SPEED * 0.75);
 
     // Reste dans la salle, puis s'arrête.
     await new Promise((r) => setTimeout(r, 2500));
-    expect(Math.hypot(me().x, me().z)).toBeLessThanOrEqual(LOBBY_RADIUS + 0.01);
+    expect(me().x).toBeLessThanOrEqual(ROOM_HALF + 0.01);
     alice.room.send("move", { x: 0, z: 0 });
     await settle();
     const stopped = me();
@@ -197,10 +251,10 @@ describe("lobby room", () => {
     alice.room.onMessage("emote", (m: any) => emotes.push(m));
     await settle();
 
-    bob.room.send("emote", { id: "dance" });
+    bob.room.send("emote", { id: "cheer" });
     bob.room.send("chat", { text: "quelle Merde ce jeu" });
     await settle();
-    expect(emotes).toEqual([{ sessionId: bob.room.sessionId, id: "dance" }]);
+    expect(emotes).toEqual([{ sessionId: bob.room.sessionId, id: "cheer" }]);
     expect(alice.chats.at(-1).text).toBe("quelle ***** ce jeu");
 
     // Un message hors schéma trahit un client non conforme : il est déconnecté.
@@ -244,15 +298,6 @@ describe("lobby room", () => {
       { type: "proposalResolved", key: "laps", accepted: true },
     ]);
 
-    // Proposition de capacité rejetée par l'hôte : rien ne change.
-    alice.room.send("propose", { key: "capacity", value: 4 });
-    await settle();
-    const [capacityProposal] = Object.values(alice.snapshot().proposals);
-    alice.room.send("resolveProposal", { id: capacityProposal!.id, accept: false });
-    await settle();
-    expect(alice.snapshot().capacity).toBe(8);
-    expect(bob.notices.at(-1)).toEqual({ type: "proposalResolved", key: "capacity", accepted: false });
-
     // Signalement : accepté sans effet visible, auto-signalement ignoré.
     bob.room.send("report", { sessionId: alice.room.sessionId, reason: "test" });
     bob.room.send("report", { sessionId: bob.room.sessionId });
@@ -262,7 +307,7 @@ describe("lobby room", () => {
     await bob.room.leave();
   });
 
-  it("launches with a ready majority, plays blackjack rounds to the end, and returns to the lobby", async () => {
+  it("launches on the host's decision, plays blackjack rounds to the end, and returns to the lobby", async () => {
     const card = (rank: string, suit = "spades") => ({ rank, suit }) as RuleCard;
     // Ordre de distribution : deux cartes par joueur dans l'ordre de la table, carte visible puis cachée du croupier, puis les tirages.
     const decks = [
@@ -287,36 +332,21 @@ describe("lobby room", () => {
       const state = () => bob.snapshot();
       const bj = () => state().blackjack;
 
-      // Conditions de lancement : hôte seul, majorité stricte de prêts.
+      // Conditions de lancement : réservé à l'hôte, sans statut « prêt ».
       bob.room.send("start", {});
-      alice.room.send("start", {});
-      alice.room.send("ready", { ready: true });
-      await settle();
-      alice.room.send("start", {}); // 1 prêt sur 2 : pas la majorité
       await settle();
       expect(bob.errors.map((e) => e.code)).toEqual(["FORBIDDEN"]);
-      expect(alice.errors.map((e) => e.message)).toEqual(Array(2).fill("Plus de la moitié des joueurs doivent être prêts."));
       expect(state().phase).toBe("waiting");
 
-      // Annulation par l'hôte, puis annulation automatique quand la majorité disparaît.
-      bob.room.send("ready", { ready: true });
-      await settle();
+      // Annulation par l'hôte.
       alice.room.send("start", {});
       await until(() => state().phase === "countdown", "compte à rebours");
       expect(state().countdown).toBeGreaterThan(0);
       alice.room.send("cancelStart", {});
       await until(() => state().phase === "waiting", "annulation hôte");
-      alice.room.send("start", {});
-      await until(() => state().phase === "countdown", "second compte à rebours");
-      bob.room.send("ready", { ready: false });
-      alice.room.send("ready", { ready: false });
-      await until(() => state().phase === "waiting", "annulation automatique");
-      expect(bob.notices.filter((n) => n.type === "launchCancelled")).toHaveLength(2);
+      expect(bob.notices.filter((n) => n.type === "launchCancelled")).toHaveLength(1);
 
       // Lancement réel.
-      bob.room.send("ready", { ready: true });
-      alice.room.send("ready", { ready: true });
-      await settle();
       alice.room.send("start", {});
       await until(() => state().phase === "playing", "partie lancée");
 

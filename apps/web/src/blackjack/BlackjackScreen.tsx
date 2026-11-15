@@ -87,7 +87,7 @@ export function BlackjackScreen({
         <Card className="w-full max-w-xl">
           <h2 className="text-4xl text-violet">Résultats</h2>
           <p className="text-sm font-bold text-ink/70">
-            Blackjack Battle · {bj.round} {bj.round > 1 ? "manches" : "manche"}
+            Blackjack · {bj.round} {bj.round > 1 ? "manches" : "manche"}
           </p>
           <table className="mt-4 w-full text-left font-bold">
             <thead className="text-xs uppercase text-ink/60">

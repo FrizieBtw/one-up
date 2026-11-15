@@ -160,7 +160,7 @@ Phases du salon (`LobbySnapshot.phase`) : `waiting` → `countdown` → `playing
 Effets synthétisés par Web Audio (`apps/web/src/lib/audio.ts`), sans fichier : sélection, retournement, insertion, prêt.
 Le contexte audio est créé au premier son, donc après une interaction. Réglages mémorisés : muet et volume des effets.
 
-## Blackjack Battle
+## Blackjack
 
 Règles (pures et testées, `packages/games/blackjack`) :
 
@@ -186,7 +186,7 @@ L'interface du lobby est générée à partir de ces schémas et le serveur vali
 
 | Jeu | Joueurs | Réglages |
 | --- | --- | --- |
-| Blackjack Battle | 1 à 6 | temps de décision 10/20/30/60 s |
+| Blackjack | 1 à 6 | temps de décision 10/20/30/60 s |
 | Kart Rush | 1 à 8 | tours 1 à 10, collisions, bots 0 à 7, sélection du circuit (direct, vote, aléatoire) |
 | Party Worlds | 2 à 8 | mode (plateau, mini-jeux), tours 5 à 30 |
 
@@ -233,7 +233,7 @@ Les jetons sont fictifs, liés aux comptes, et n'achètent que des cosmétiques.
 
 Base (`supabase/migrations/20261113000000_economy.sql`) :
 
-- `economy_settings` (une ligne, lecture seule côté client) : solde initial (200), aide de reprise (sous 20 jetons, +100, une fois par 24 h),
+- `economy_settings` (une ligne, lecture seule côté client) : solde initial (200),
   jetons de session (10 + 2 par manche gagnée, plafonnés à 150 par jour UTC et par joueur). Tout est modifiable en base sans toucher au code.
 - `wallets` (solde, jamais négatif : contrainte `check`) et `wallet_transactions` (historique). La clé unique `(compte, nature, référence)` interdit
   d'enregistrer deux fois la même récompense, le même achat ou la même mission.
@@ -256,7 +256,7 @@ Cosmétiques en jeu :
   (`Player.cosmetics`) et rendue par le composant `Avatar` pour tous ; emotes possédées gardées côté serveur seulement.
 - Emotes de boutique (`spin`, `bow`) : le serveur refuse (`FORBIDDEN`) toute emote qu'un joueur ne possède pas ; les quatre gratuites restent ouvertes à tous.
 - Fini de cartouche et cadre de profil : appliqués côté client à partir des objets équipés du compte (état partagé `useEconomy`, `apps/web/src/lib/economy.ts`).
-- Interface (profil, comptes seulement) : Boutique (essayage sur l'aperçu 3D, achat en deux temps), Inventaire (équipement, historique, aide de reprise), Missions.
+- Interface (profil, comptes seulement) : Boutique (essayage sur l'aperçu 3D, achat en deux temps), Inventaire (équipement, historique), Missions.
   Le solde s'affiche dans l'en-tête et se rafraîchit après chaque achat et chaque récompense de session.
 
 ## Éditeur de personnage KayKit (chantier graphique, en cours)
