@@ -19,7 +19,11 @@ export interface HeadEntry {
   exclude?: string;
 }
 
-const head = (id: string, label: string, extra: Partial<HeadEntry> = {}): HeadEntry => ({ id, label, file: `${id}.glb`, skull: false, ...extra });
+const head = (
+  id: string,
+  label: string,
+  extra: Partial<HeadEntry> = {},
+): HeadEntry => ({ id, label, file: `${id}.glb`, skull: false, ...extra });
 const skull = { skull: true } as const;
 /** Une tête dont seuls les traits du visage servent (peau, nez, yeux, sourcils), pas la coiffure. */
 const FACE_ONLY: PartRole[] = ["skin", "ear", "nose", "eye", "brow"];
@@ -34,7 +38,10 @@ export const HEADS: HeadEntry[] = [
   head("Protagonist_B", "Bandeau", skull),
   head("MagicalGirl", "Couettes", skull),
   head("Driver", "Coupe en brosse", skull),
-  head("Cleric", "Visage seul (le capuchon n'est pas une coiffure)", { ...skull, roles: FACE_ONLY }),
+  head("Cleric", "Visage seul (le capuchon n'est pas une coiffure)", {
+    ...skull,
+    roles: FACE_ONLY,
+  }),
 
   // Têtes sources : fournissent coiffure, barbe, sourcils et yeux, mais ont un crâne ouvert sous les cheveux.
   head("Ranger", "Cheveux mi-longs, bouc"),
@@ -52,13 +59,27 @@ export const HEADS: HeadEntry[] = [
   head("Witch", "Longs cheveux blonds"),
 
   // Écartées : le résultat ne convient pas à l'éditeur.
-  head("Druid", "Capuche à bois", { exclude: "capuche et bois qui recouvrent toute la tête" }),
-  head("Rogue_Hooded", "Capuche", { exclude: "capuche qui recouvre la tête et les oreilles" }),
-  head("Survivalist", "Cache-œil", { exclude: "cache-œil peint dans la palette, pris pour un sourcil" }),
-  head("Monster", "Costume de monstre", { exclude: "tête de créature, sans yeux ni sourcils humains" }),
-  head("PlantWarrior", "Guerrier végétal", { exclude: "tête de créature, sans sourcils" }),
-  head("Superhero", "Masque", { exclude: "masque qui recouvre le haut du visage" }),
-  head("Clown", "Clown", { exclude: "visage maquillé : teint et sourcils peints dans la palette" }),
+  head("Druid", "Capuche à bois", {
+    exclude: "capuche et bois qui recouvrent toute la tête",
+  }),
+  head("Rogue_Hooded", "Capuche", {
+    exclude: "capuche qui recouvre la tête et les oreilles",
+  }),
+  head("Survivalist", "Cache-œil", {
+    exclude: "cache-œil peint dans la palette, pris pour un sourcil",
+  }),
+  head("Monster", "Costume de monstre", {
+    exclude: "tête de créature, sans yeux ni sourcils humains",
+  }),
+  head("PlantWarrior", "Guerrier végétal", {
+    exclude: "tête de créature, sans sourcils",
+  }),
+  head("Superhero", "Masque", {
+    exclude: "masque qui recouvre le haut du visage",
+  }),
+  head("Clown", "Clown", {
+    exclude: "visage maquillé : teint et sourcils peints dans la palette",
+  }),
 ];
 
 /** Têtes qui alimentent l'éditeur. */

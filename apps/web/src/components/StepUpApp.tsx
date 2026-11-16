@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { PRESENCE_PING_SECONDS } from "@stepup/shared";
-import { getGame } from "@stepup/shared";
 import { joinChamber, resumeChamber } from "@/lib/chamber";
 import { useNav } from "@/lib/nav";
 import { useEconomy } from "@/lib/economy";
@@ -12,7 +11,6 @@ import { padBackPressed } from "@/lib/input";
 import { DELETE_PENDING_KEY, useSession } from "@/lib/session";
 import { ConsoleScreen } from "./ConsoleScreen";
 import { HudHeader } from "./HudHeader";
-import { LobbyScreen } from "./LobbyScreen";
 import { LoginScreen } from "./LoginScreen";
 import { RoomScreen } from "./RoomScreen";
 import { AvatarInvite } from "./profile/AvatarInvite";
@@ -26,10 +24,6 @@ export function StepUpApp() {
   // Paramètres, profil, boutique et console sont des fenêtres de même rang : une seule est affichée, la chambre reste derrière.
   const view = current;
   const profileTab = useNav((s) => s.profileTab);
-  const code = useNav((s) => s.code);
-  const selectedGame = useNav((s) =>
-    s.view === "cartridge" && s.gameId ? getGame(s.gameId) : undefined,
-  );
 
   useEffect(() => {
     const { syncFromUrl, back } = useNav.getState();
@@ -75,8 +69,17 @@ export function StepUpApp() {
 
   // Solde et objets du compte : chargés à la connexion, vidés à la déconnexion.
   useEffect(() => {
-    if (session.userId) void useEconomy.getState().refresh(session.userId);
-    else useEconomy.getState().reset();
+    if (!session.userId) return useEconomy.getState().reset();
+    const userId = session.userId;
+    void useEconomy.getState().refresh(userId);
+    // Chargement échoué (réseau, jeton en cours de renouvellement) : le solde resterait sur « … » ; on réessaie jusqu'à trois fois.
+    let tries = 0;
+    const retry = setInterval(() => {
+      if (useEconomy.getState().balance !== null || ++tries > 3)
+        return clearInterval(retry);
+      void useEconomy.getState().refresh(userId);
+    }, 3000);
+    return () => clearInterval(retry);
   }, [session.userId]);
 
   // Un compte signale régulièrement qu'il est en ligne (les amis le voient selon ses réglages de confidentialité).
@@ -108,8 +111,6 @@ export function StepUpApp() {
 
         {!session.loaded ? (
           <p aria-busy="true">Chargement…</p>
-        ) : view === "lobby" && code ? (
-          <LobbyScreen />
         ) : view === "profile" ? (
           session.userId ? (
             <ProfileScreen

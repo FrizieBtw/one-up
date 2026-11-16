@@ -2,14 +2,15 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { RoomAccess } from "@stepup/shared";
 
 /** Réglages d'affichage et de chambre, mémorisés sur l'appareil. */
 export const useDisplay = create(
   persist<{
     floatingDecor: boolean;
     setFloatingDecor: (on: boolean) => void;
-    roomOpen: boolean;
-    setRoomOpen: (open: boolean) => void;
+    roomAccess: RoomAccess;
+    setRoomAccess: (access: RoomAccess) => void;
     gameId: string | null;
     setGameId: (id: string) => void;
     musicOn: boolean;
@@ -20,9 +21,9 @@ export const useDisplay = create(
     (set) => ({
       floatingDecor: true,
       setFloatingDecor: (floatingDecor) => set({ floatingDecor }),
-      /** Chambre ouverte aux autres joueurs (visible dans « Chambres ouvertes ») ; privée par défaut. */
-      roomOpen: false,
-      setRoomOpen: (roomOpen) => set({ roomOpen }),
+      /** Accès à la chambre : fermée (code requis), publique (visible dans « Chambres ouvertes ») ou amis seulement ; fermée par défaut. */
+      roomAccess: "closed",
+      setRoomAccess: (roomAccess) => set({ roomAccess }),
       /** Cartouche choisie dans la Console (affichée dans les infos de la chambre). */
       gameId: null,
       setGameId: (gameId) => set({ gameId }),

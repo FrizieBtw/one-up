@@ -107,6 +107,8 @@ export function describeJoinError(error: unknown): string {
     return "Tu as été exclu de cette chambre.";
   if (message.includes(JoinError.AlreadyInRoom))
     return "Vous êtes déjà dans ce salon (autre onglet ?).";
+  if (message.includes(JoinError.FriendsOnly))
+    return "Cette chambre est réservée aux amis de l'hôte.";
   if (message.includes(JoinError.InProgress))
     return "La partie a déjà commencé.";
   if (message.includes("not found"))

@@ -65,12 +65,12 @@ describe("lobby room", () => {
 
   it("rejects unauthenticated clients and invalid creation options", async () => {
     colyseus.sdk.auth.token = "garbage.token";
-    await expect(colyseus.sdk.create(LOBBY_ROOM_NAME, { gameId: "kart", isPublic: true })).rejects.toThrow();
-    await expect(create("Alice", { gameId: "nope", isPublic: true })).rejects.toThrow();
+    await expect(colyseus.sdk.create(LOBBY_ROOM_NAME, { gameId: "kart", access: "public" })).rejects.toThrow();
+    await expect(create("Alice", { gameId: "nope", access: "public" })).rejects.toThrow();
   });
 
   it("runs a full two-player lobby: join by code, ready, chat, settings, host transfer", async () => {
-    const alice = await create("Alice", { gameId: "kart", isPublic: true });
+    const alice = await create("Alice", { gameId: "kart", access: "public" });
     const code = alice.room.roomId;
     expect(normalizeRoomCode(code)).toBe(code);
 
@@ -135,7 +135,7 @@ describe("lobby room", () => {
   });
 
   it("keeps a dropped host's seat and role, and restores on reconnect", async () => {
-    const alice = await create("Alice", { gameId: "blackjack", isPublic: false });
+    const alice = await create("Alice", { gameId: "blackjack", access: "closed" });
     const code = alice.room.roomId;
     const bob = await joinByCode("Bob", code);
     await settle();
@@ -163,7 +163,7 @@ describe("lobby room", () => {
   });
 
   it("kicks a player quickly and bars them from coming back", async () => {
-    const alice = await create("Alice", { gameId: "blackjack", isPublic: false });
+    const alice = await create("Alice", { gameId: "blackjack", access: "closed" });
     const bob = await joinByCode("Bob", alice.room.roomId);
     await settle();
     const bobSession = bob.room.sessionId;
@@ -184,7 +184,7 @@ describe("lobby room", () => {
   });
 
   it("shares the sitting posture and the creator's starting position", async () => {
-    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const alice = await create("Alice", { gameId: "kart", access: "closed" });
     const bob = await joinByCode("Bob", alice.room.roomId);
     await settle();
     alice.room.send("spawnAt", { x: 1, z: -1 });
@@ -199,8 +199,44 @@ describe("lobby room", () => {
     await bob.room.leave();
   });
 
+  it("lets blackjack players choose their seats freely; those left standing watch", async () => {
+    const saved = { ...tuning };
+    Object.assign(tuning, { introMs: 400, tickMs: 30, dealerStepMs: 10 });
+    try {
+      const alice = await create("Alice", { gameId: "blackjack", access: "closed" });
+      const bob = await joinByCode("Bob", alice.room.roomId);
+      const carol = await joinByCode("Carol", alice.room.roomId);
+      await settle();
+      alice.room.send("start", {});
+      for (let i = 0; i < 100 && alice.snapshot().phase !== "playing"; i++) await new Promise((r) => setTimeout(r, 100));
+      const seatOf = (c: { room: { sessionId: string }; snapshot: () => any }) => c.snapshot().players[c.room.sessionId].seat;
+      expect(seatOf(alice)).toBe(-1); // debout tant que la table n'est pas prête
+      bob.room.send("sitAt", { seat: 5 });
+      alice.room.send("sitAt", { seat: 5 }); // déjà prise
+      alice.room.send("sitAt", { seat: 2 });
+      await new Promise((r) => setTimeout(r, 150));
+      expect(seatOf(bob)).toBe(5);
+      expect(seatOf(alice)).toBe(2);
+      // La manche démarre après l'arrivée de la table : Carol, restée debout, ne joue pas.
+      for (let i = 0; i < 50 && alice.snapshot().blackjack.round === 0; i++) await new Promise((r) => setTimeout(r, 50));
+      expect(seatOf(carol)).toBe(-1);
+      expect(alice.snapshot().blackjack.round).toBe(1);
+      // Ordre de jeu : de la place la plus haute à la plus basse, Bob (5) puis Alice (2).
+      expect(Object.keys(alice.snapshot().blackjack.players)).toEqual([bob.room.sessionId, alice.room.sessionId]);
+      // Pas de changement de place en plein tour.
+      alice.room.send("standUp", {});
+      await new Promise((r) => setTimeout(r, 100));
+      expect(seatOf(alice)).toBe(2);
+      await carol.room.leave();
+      await alice.room.leave();
+      await bob.room.leave();
+    } finally {
+      Object.assign(tuning, saved);
+    }
+  });
+
   it("lets only the host close the room: everyone is told and disconnected", async () => {
-    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const alice = await create("Alice", { gameId: "kart", access: "closed" });
     const bob = await joinByCode("Bob", alice.room.roomId);
     await settle();
     let closed = false;
@@ -217,7 +253,7 @@ describe("lobby room", () => {
   });
 
   it("simulates movement on the server: speed cap, room bounds, no client positions", async () => {
-    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const alice = await create("Alice", { gameId: "kart", access: "closed" });
     await settle();
     const me = () => alice.snapshot().players[alice.room.sessionId]!;
     const start = me();
@@ -245,7 +281,7 @@ describe("lobby room", () => {
   });
 
   it("broadcasts valid emotes, filters chat, and runs proposals through votes and host decision", async () => {
-    const alice = await create("Alice", { gameId: "kart", isPublic: false });
+    const alice = await create("Alice", { gameId: "kart", access: "closed" });
     const bob = await joinByCode("Bob", alice.room.roomId);
     const emotes: any[] = [];
     alice.room.onMessage("emote", (m: any) => emotes.push(m));
@@ -309,13 +345,13 @@ describe("lobby room", () => {
 
   it("launches on the host's decision, plays blackjack rounds to the end, and returns to the lobby", async () => {
     const card = (rank: string, suit = "spades") => ({ rank, suit }) as RuleCard;
-    // Ordre de distribution : deux cartes par joueur dans l'ordre de la table, carte visible puis cachée du croupier, puis les tirages.
+    // Ordre de distribution réglementaire : une carte à chaque joueur (ordre de la table), une au croupier (visible), une seconde à chaque joueur, la cachée du croupier, puis les tirages.
     const decks = [
-      [card("10"), card("6"), card("A"), card("K"), card("9"), card("8"), card("5")], // Alice 16 puis 21, Bob naturel, croupier 17
-      [card("K"), card("5"), card("9"), card("7"), card("10"), card("9"), card("K")], // Alice dépasse, Bob 16 laissé au chrono, croupier 19
+      [card("10"), card("A"), card("9"), card("6"), card("K"), card("8"), card("5")], // Alice 16 puis 21, Bob naturel, croupier 17
+      [card("K"), card("9"), card("10"), card("5"), card("7"), card("9"), card("K")], // Alice dépasse, Bob 16 laissé au chrono, croupier 19
     ];
     const saved = { ...tuning };
-    Object.assign(tuning, { tickMs: 30, dealerStepMs: 10, deck: () => decks.shift() ?? createDeck() });
+    Object.assign(tuning, { introMs: 0, tickMs: 30, dealerStepMs: 10, deck: () => decks.shift() ?? createDeck() });
     const until = async (condition: () => boolean, label: string) => {
       for (let i = 0; i < 150; i++) {
         if (condition()) return;
@@ -325,7 +361,7 @@ describe("lobby room", () => {
     };
 
     try {
-      const alice = await create("Alice", { gameId: "blackjack", isPublic: true });
+      const alice = await create("Alice", { gameId: "blackjack", access: "public" });
       const code = alice.room.roomId;
       const bob = await joinByCode("Bob", code);
       await settle();
@@ -338,17 +374,12 @@ describe("lobby room", () => {
       expect(bob.errors.map((e) => e.code)).toEqual(["FORBIDDEN"]);
       expect(state().phase).toBe("waiting");
 
-      // Annulation par l'hôte.
-      alice.room.send("start", {});
-      await until(() => state().phase === "countdown", "compte à rebours");
-      expect(state().countdown).toBeGreaterThan(0);
-      alice.room.send("cancelStart", {});
-      await until(() => state().phase === "waiting", "annulation hôte");
-      expect(bob.notices.filter((n) => n.type === "launchCancelled")).toHaveLength(1);
-
-      // Lancement réel.
+      // Lancement réel : immédiat, sans compte à rebours.
       alice.room.send("start", {});
       await until(() => state().phase === "playing", "partie lancée");
+      alice.room.send("sitAt", { seat: 1 }); // on joue de la place la plus haute à la plus basse : Alice, puis Bob
+      bob.room.send("sitAt", { seat: 0 });
+      await until(() => bj().round === 1, "première manche");
 
       // Pas de spectateur ni d'entrée en cours de partie ; règles verrouillées.
       colyseus.sdk.auth.token = issueGuestToken("Carol").token;
@@ -405,6 +436,14 @@ describe("lobby room", () => {
       bob.room.send("backToLobby", {});
       await until(() => state().phase === "waiting", "retour au lobby");
       expect(state().players[bob.room.sessionId]!.ready).toBe(false);
+
+      // Une nouvelle partie repart de zéro : ni cartes du croupier ni manche en cours de l'ancienne, et l'on peut s'asseoir.
+      bob.room.send("start", {});
+      await until(() => state().phase === "playing", "partie relancée");
+      expect(bj()).toMatchObject({ round: 0, stage: "finished", dealer: [] });
+      expect(Object.keys(bj().players)).toHaveLength(0);
+      bob.room.send("sitAt", { seat: 2 });
+      await until(() => state().players[bob.room.sessionId]!.seat === 2, "place prise après relance");
       await bob.room.leave();
     } finally {
       Object.assign(tuning, saved);

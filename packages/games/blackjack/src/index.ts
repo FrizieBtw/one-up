@@ -1,13 +1,16 @@
 // Règles de Blackjack : fonctions pures, partagées par le serveur (autorité) et le client (affichage).
 //
 // Règles retenues :
-// - Un paquet de 52 cartes, remélangé à chaque manche.
-// - Actions du joueur : tirer ou rester. Pas de doublement, de séparation ni d'assurance.
+// - Un paquet de 52 cartes, remélangé à chaque manche (pas de comptage de cartes possible).
+// - Actions du joueur : tirer, rester, doubler (deux premières cartes d'une main, une seule carte ensuite) et séparer une paire
+//   (deux cartes de même valeur, une seule séparation ; doubler est permis après séparation). Pas d'assurance ni de abandon.
+// - Le croupier ne regarde pas sa carte cachée avant la fin des joueurs : un blackjack du croupier n'est révélé qu'à la fin.
 // - Un as vaut 11 tant que la main ne dépasse pas 21, sinon 1.
 // - Blackjack naturel = 21 avec les deux premières cartes. Il bat un 21 obtenu en trois cartes ou plus.
 // - Le croupier tire jusqu'à 17 et reste sur tout 17, y compris un 17 « souple » (as compté 11).
 // - Un joueur qui dépasse 21 perd, quel que soit le jeu du croupier.
-// - Score de classement : victoire 3, égalité 1, défaite 0. Aucune mise, aucun jeton engagé.
+// - Score de classement : victoire 3, égalité 1, défaite 0 (par main).
+// - Mises (comptes connectés) : victoire payée 1 pour 1, blackjack naturel 3 pour 2, égalité rendue. Un 21 après séparation n'est pas un blackjack.
 
 export const SUITS = ["spades", "hearts", "diamonds", "clubs"] as const;
 export const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] as const;
@@ -56,12 +59,17 @@ export const isBust = (cards: readonly Pick<Card, "rank">[]) => handValue(cards)
 export const isNatural = (cards: readonly Pick<Card, "rank">[]) => cards.length === 2 && handValue(cards).total === 21;
 export const dealerShouldHit = (cards: readonly Pick<Card, "rank">[]) => handValue(cards).total < 17;
 
-/** Résultat d'une main de joueur face à la main finale du croupier. */
-export function resolveHand(player: readonly Pick<Card, "rank">[], dealer: readonly Pick<Card, "rank">[]): HandResult {
+/** Résultat d'une main de joueur face à la main finale du croupier. `split` : main issue d'une séparation, un 21 à deux cartes n'y est pas un blackjack naturel. */
+export function resolveHand(
+  player: readonly Pick<Card, "rank">[],
+  dealer: readonly Pick<Card, "rank">[],
+  split = false,
+): HandResult {
   const p = handValue(player).total;
   const d = handValue(dealer).total;
+  const playerNatural = !split && isNatural(player);
   if (p > 21) return "loss";
-  if (isNatural(player) !== isNatural(dealer)) return isNatural(player) ? "win" : "loss";
+  if (playerNatural !== isNatural(dealer)) return playerNatural ? "win" : "loss";
   if (d > 21 || p > d) return "win";
   return p === d ? "push" : "loss";
 }

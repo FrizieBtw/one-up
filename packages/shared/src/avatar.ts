@@ -49,6 +49,7 @@ export const AVATAR_FACES = [
 
 /** Teintes de peau et couleurs de cheveux proposées d'emblée (les autres ne sont pas proposées pour l'instant). */
 export const FREE_SKINS: readonly string[] = [
+  AVATAR_OPTIONS.skin[1], // beige clair
   AVATAR_OPTIONS.skin[2],
   AVATAR_OPTIONS.skin[3],
   AVATAR_OPTIONS.skin[4],

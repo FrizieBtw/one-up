@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@supabase/supabase-js";
+import { keepAcrossReloads } from "./hmr";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -8,10 +9,11 @@ import type { Identity } from "@stepup/shared";
 import { GAME_SERVER_URL, SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 
 /** null tant que Supabase n'est pas configuré : seul l'accès invité est alors proposé. */
-export const supabase =
+export const supabase = keepAcrossReloads("stepup:supabase", () =>
   SUPABASE_URL && SUPABASE_ANON_KEY
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    : null;
+    : null,
+);
 
 interface GuestSession {
   token: string;
@@ -94,11 +96,14 @@ export function useSession(): SessionView {
     const client = supabase;
     const sync = async (userId: string | undefined) => {
       if (!userId) return setAccount(null);
-      const { data } = await client
+      const { data, error } = await client
         .from("profiles")
         .select("username")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
+      // Échec passager (réseau, jeton en cours de renouvellement, au retour sur l'onglet) : on garde le compte déjà connu au lieu de
+      // déconnecter l'interface (sinon : solde « … », Échap sans effet). Seule l'absence réelle de profil vide le compte.
+      if (error) return;
       setAccount(data?.username ? { id: userId, name: data.username } : null);
     };
     client.auth

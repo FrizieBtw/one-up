@@ -266,7 +266,7 @@ export function ConsoleScreen() {
                   disabled={busy || inRoom < min || inRoom > max}
                   onClick={() => void launch()}
                 >
-                  Lancer la partie
+                  Lancer le jeu
                 </HudButton>
               ) : (
                 <span className="text-[12.5px] text-hud-muted">

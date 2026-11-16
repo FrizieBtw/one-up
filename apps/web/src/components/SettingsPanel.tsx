@@ -885,7 +885,7 @@ function Account({ onClose }: { onClose: () => void }) {
 
 /** Chambre : accès et capacité (réservés à l'hôte). La chambre est solo pour l'instant : le code n'existe que dans un salon. */
 function RoomSection() {
-  const { roomOpen, setRoomOpen } = useDisplay();
+  const { roomAccess, setRoomAccess } = useDisplay();
   return (
     <div>
       <Title>Chambre</Title>
@@ -894,11 +894,12 @@ function RoomSection() {
         <HudSegmented
           label="Accès"
           className={seg}
-          value={roomOpen ? "open" : "private"}
-          onChange={(v) => setRoomOpen(v === "open")}
+          value={roomAccess}
+          onChange={setRoomAccess}
           options={[
-            { value: "private", label: "Privée" },
-            { value: "open", label: "Ouverte" },
+            { value: "closed", label: "Fermée" },
+            { value: "public", label: "Publique" },
+            { value: "friends", label: "Amis seulement" },
           ]}
         />
       </Row>

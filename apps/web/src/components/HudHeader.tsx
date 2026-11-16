@@ -86,19 +86,6 @@ export function HudHeader() {
     </HudPanel>
   );
 
-  // Dans un salon, la cartouche réduite occupe le coin et quitter le salon n'est pas anodin : logo et paramètres seulement.
-  if (view === "lobby")
-    return (
-      <header className="fixed top-4 left-4 z-10 flex items-center gap-3 pr-28">
-        {logo}
-        <HudPanel className="rounded-full p-[3px]">
-          <Tab active={settingsOpen} onClick={onSettings}>
-            <SettingsIcon /> Paramètres
-          </Tab>
-        </HudPanel>
-      </header>
-    );
-
   const isUser = session.kind === "user";
   const active = settingsOpen
     ? "settings"

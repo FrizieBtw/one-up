@@ -1,6 +1,7 @@
 "use client";
 
 import type { Room } from "@colyseus/sdk";
+import { keepAcrossReloads } from "./hmr";
 import { create } from "zustand";
 import {
   GAMES,
@@ -19,8 +20,7 @@ import {
 } from "./lobby";
 import { useNav } from "./nav";
 
-// La chambre du joueur est un salon du serveur de jeu : le sien (créé à la demande : en ouvrant la chambre, avec « Créer code »,
-// ou en lançant une partie) ou celui d'un autre qu'il a rejoint par son code. Tant qu'aucun salon n'existe, la chambre est solo.
+// La chambre du joueur est un salon du serveur de jeu : le sien (créé dès l'arrivée dans la chambre : elle a toujours un code) ou celui d'un autre qu'il a rejoint par son code. Tant qu'aucun salon n'existe, la chambre est solo.
 // Quand la partie démarre, l'écran de jeu prend le relais ; quand elle se termine, on revient ici.
 
 /** Ligne du fil : message de chat (avec `name` et `fromId`) ou annonce système. */
@@ -63,12 +63,14 @@ const EMPTY = {
   gameId: null,
 } satisfies Partial<Chamber>;
 
-export const useChamber = create<Chamber>(() => ({
-  ...EMPTY,
-  creating: false,
-  error: null,
-  joinSeq: 0,
-}));
+export const useChamber = keepAcrossReloads("stepup:chamber", () =>
+  create<Chamber>(() => ({
+    ...EMPTY,
+    creating: false,
+    error: null,
+    joinSeq: 0,
+  })),
+);
 
 let feedKey = 0;
 /** Ajoute une ligne au fil (messages du serveur ou message local quand la chambre est solo). */
@@ -131,9 +133,11 @@ function attach(room: Room, code: string) {
         );
       case "accessChanged":
         return announce(
-          m.isPublic
-            ? "La chambre est maintenant ouverte."
-            : "La chambre est maintenant privée.",
+          m.access === "public"
+            ? "La chambre est maintenant publique."
+            : m.access === "friends"
+              ? "La chambre est maintenant réservée aux amis."
+              : "La chambre est maintenant fermée.",
           false,
         );
       case "settingChanged":
@@ -156,17 +160,6 @@ function attach(room: Room, code: string) {
     if (key === lastKey) return;
     lastKey = key;
     useChamber.setState({ snapshot, gameId: snapshot.gameId });
-
-    // Partie lancée : l'écran de jeu prend la place de la chambre ; retour à la chambre quand elle se termine.
-    const phase = snapshot.phase;
-    const nav = useNav.getState();
-    if ((phase === "playing" || phase === "results") && nav.view !== "lobby") {
-      nav.enterLobby(code, snapshot.gameId);
-    } else if (
-      (phase === "waiting" || phase === "countdown") &&
-      nav.view === "lobby"
-    )
-      nav.showRoom();
   };
   room.onStateChange(onState);
   room.onDrop(() => useChamber.setState({ online: false }));
@@ -223,14 +216,14 @@ export function ensureChamber(): Promise<void> {
   busy = (async () => {
     useChamber.setState({ creating: true, error: null });
     try {
-      const { gameId, roomOpen } = useDisplay.getState();
+      const { gameId, roomAccess } = useDisplay.getState();
       const game =
         GAMES.find((g) => g.id === gameId) ??
         GAMES.find((g) => g.status === "available") ??
         GAMES[0]!;
       const code = await createLobby({
         gameId: game.id as GameId,
-        isPublic: roomOpen,
+        access: roomAccess,
       });
       const room = await connectLobby(code);
       useChamber.setState({ code, room, gameId: game.id, error: null });
@@ -293,14 +286,17 @@ export async function leaveChamber(): Promise<void> {
 
 type RoomMessage =
   | "setGame"
-  | "setPublic"
+  | "setAccess"
   | "setSetting"
   | "kick"
   | "start"
   | "cancelStart"
   | "backToLobby"
+  | "stopGame"
   | "chat"
   | "closeRoom"
+  | "sitAt"
+  | "standUp"
   | "refreshAvatar";
 
 /** Envoie un message au salon de la chambre, s'il existe. */
@@ -313,6 +309,6 @@ export function chamberSend(
 
 // Accès réglé dans les Paramètres ou le panneau de la chambre : transmis au salon dès qu'ils changent.
 useDisplay.subscribe((state, previous) => {
-  if (state.roomOpen !== previous.roomOpen)
-    chamberSend("setPublic", { isPublic: state.roomOpen });
+  if (state.roomAccess !== previous.roomAccess)
+    chamberSend("setAccess", { access: state.roomAccess });
 });

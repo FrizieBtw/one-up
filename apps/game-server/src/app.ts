@@ -32,6 +32,10 @@ function lastAuthAt(token: string | undefined): number {
 
 const guestAllowed = createRateLimiter(10, 60_000);
 
+/** Pages servies par une machine du réseau privé (développement) : localhost, 192.168.x.x, 10.x.x.x, 172.16-31.x.x. */
+const LAN_ORIGIN =
+  /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
+
 export const server = defineServer({
   rooms: {
     [LOBBY_ROOM_NAME]: defineRoom(LobbyRoom),
@@ -40,7 +44,18 @@ export const server = defineServer({
     app.use(
       ["/health", "/auth", "/rooms", "/presence", "/account"],
       (req, res, next) => {
-        res.setHeader("Access-Control-Allow-Origin", env.webOrigin);
+        // Origine web configurée ; en développement, aussi localhost et le réseau local (jouer à plusieurs depuis la même maison).
+        const origin = req.headers.origin;
+        const allowed =
+          origin === env.webOrigin ||
+          (process.env.NODE_ENV !== "production" &&
+            typeof origin === "string" &&
+            LAN_ORIGIN.test(origin));
+        res.setHeader(
+          "Access-Control-Allow-Origin",
+          allowed && origin ? origin : env.webOrigin,
+        );
+        res.setHeader("Vary", "Origin");
         res.setHeader(
           "Access-Control-Allow-Headers",
           "Content-Type, Authorization",

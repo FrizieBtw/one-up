@@ -1,22 +1,9 @@
 @import "tailwindcss";
 
-/* Design system StepUp : rétro 90s + « Vibrant Playful ». Tous les jetons visuels vivent ici. */
+/* Direction OneUP « Nuit douce » (maquettes dans docs/maquettes) : tous les jetons visuels vivent ici. */
 @theme {
-  --color-cream: #fff4dc;
-  --color-cream-deep: #f7e3b8;
-  --color-ink: #2a1b4d;
-  --color-violet: #6c3bf5;
-  --color-violet-deep: #4a22c4;
-  --color-turquoise: #14c4bd;
-  --color-orange: #ff8a1f;
-  --color-coral: #ff5c6c;
-  --color-sun: #ffd23f;
-
-  --font-display: var(--font-baloo), "Trebuchet MS", sans-serif;
   --font-sans: var(--font-nunito), system-ui, sans-serif;
 
-  /* Direction OneUP « Nuit douce » (maquettes dans docs/maquettes) : ajoutée à côté de l'ancien système,
-     les écrans non encore refaits gardent les jetons ci-dessus. */
   --color-night: #1c1840;
   --color-night-panel: #352f6b;
   --color-floor: #453f88;
@@ -44,10 +31,6 @@
   --font-pixel-body: var(--font-jersey25), "Courier New", monospace;
   --radius-hud: 18px;
 
-  --radius-chunk: 1.5rem;
-  /* Relief « autocollant » : ombre dure décalée, signature visuelle des cartes et boutons. */
-  --shadow-chunk: 0 6px 0 var(--color-ink);
-  --shadow-chunk-sm: 0 3px 0 var(--color-ink);
 }
 
 body {
@@ -62,7 +45,7 @@ body {
 h1,
 h2,
 h3 {
-  font-family: var(--font-display);
+  font-family: var(--font-hud);
   line-height: 1.1;
 }
 
@@ -73,7 +56,7 @@ button:not(:disabled),
 }
 
 :focus-visible {
-  outline: 3px solid var(--color-violet);
+  outline: 3px solid var(--color-hud-accent);
   outline-offset: 3px;
 }
 
@@ -84,27 +67,6 @@ button:not(:disabled),
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* Apparition du panneau au dos de la cartouche, une fois le retournement engagé. */
-@keyframes back-panel-in {
-  from {
-    opacity: 0;
-    transform: scale(0.92);
-  }
-}
-.back-panel-in {
-  animation: back-panel-in 0.25s ease-out 0.3s backwards;
-}
-
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-}
-.rise-in {
-  animation: rise-in 0.4s ease-out backwards;
 }
 
 /* Message de chat éphémère : apparaît en glissant, reste visible, puis s'efface en fondu (7 s au total, comme la maquette). */

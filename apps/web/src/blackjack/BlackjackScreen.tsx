@@ -1,252 +1,410 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useState, type ReactNode } from "react";
-import { handValue, type Rank } from "@stepup/blackjack";
-import { levelProgress, type BlackjackPlayerSnapshot, type CardSnapshot, type ClientMessage, type ClientMessageType, type LobbySnapshot, type ServerMessages } from "@stepup/shared";
-import { loadMissionTitles } from "@/lib/economy";
-import { loadAchievementTitles } from "@/lib/social";
-import { Badge, Button, Card } from "@/components/ui";
+import { useEffect, useRef, useState } from "react";
+import {
+  BLACKJACK_CHIPS,
+  BLACKJACK_MAX_BET,
+  BLACKJACK_MIN_BET,
+  type ClientMessage,
+  ClientMessageType,
+  type LobbySnapshot,
+} from "@stepup/shared";
 import { attachInput, readGamepadPresses, useInputDevice } from "@/lib/input";
+import { keyLabel, useKeybinds, useLayoutMap } from "@/lib/keybinds";
+import { HudButton, HudPanel } from "@/components/hud";
+import { ControllerIcon, KeyIcon } from "@/components/inputPrompts";
+import { TokensIcon } from "@/components/icons";
+import { useBetPreview, useDealt } from "@/room/dealt";
+import { useEconomy } from "@/lib/economy";
+import { CHIP_STYLE } from "@/room/chips";
+import { handValue, type Rank } from "@stepup/blackjack";
 
-// WebGL : rendu côté client uniquement.
-const BlackjackTable3D = dynamic(() => import("./BlackjackTable3D"), { ssr: false });
+// Partie de blackjack : la table et les cartes sont dans la scène 3D (voir room/BlackjackTable).
+// Ce composant ne garde que les commandes : les boutons d'action (clic ou touche) et les raccourcis clavier / manette.
 
-type Send = <T extends ClientMessageType>(type: T, message: ClientMessage<T>) => void;
+type Send = <T extends ClientMessageType>(
+  type: T,
+  message: ClientMessage<T>,
+) => void;
 
-const total = (cards: CardSnapshot[]) => handValue(cards as { rank: Rank }[]).total;
-
-function statusLabel(player: BlackjackPlayerSnapshot): string {
-  if (player.result === "win") return "Gagné +3";
-  if (player.result === "push") return "Égalité +1";
-  if (player.result === "loss") return "Perdu";
-  return { playing: "En jeu", stood: "Reste", bust: "Dépassé", blackjack: "Blackjack !" }[player.status];
+/** Montant en jetons, avec l'icône de jetons (la même que dans l'encoche de profil). */
+function Amount({ value, sign }: { value: number; sign?: boolean }) {
+  const text = Math.abs(value).toLocaleString("fr-FR");
+  return (
+    <span className="inline-flex items-center gap-1 align-middle">
+      {sign ? (value > 0 ? "+" : value < 0 ? "−" : "") : ""}
+      {text}
+      <TokensIcon className="size-[1.15em]" />
+    </span>
+  );
 }
 
+/** Bouton d'action avec le rappel de sa touche. */
+function ActionButton({
+  code,
+  pad,
+  label,
+  variant,
+  onClick,
+}: {
+  code: string;
+  /** Bouton de manette équivalent (affiché à la place de la touche quand on joue à la manette). */
+  pad?: string;
+  label: string;
+  variant: "primary" | "outline" | "danger" | "soft";
+  onClick: () => void;
+}) {
+  const layout = useLayoutMap();
+  const device = useInputDevice();
+  const shown = keyLabel(code, layout);
+  return (
+    <HudButton variant={variant} onClick={onClick} className="min-w-28 px-5">
+      {label}
+      {device === "gamepad" && pad ? (
+        <ControllerIcon
+          button={pad}
+          label={pad.toUpperCase()}
+          className="size-8"
+        />
+      ) : (
+        // La touche dessinée occupe 48 sur 64 de l'icône (marge de 8 de chaque côté, coins de rayon 8) : le fond blanc fait
+        // exactement cette taille, l'icône (agrandie à 32 px) déborde dessus de 4 px de chaque côté.
+        <span className="size-6 rounded-[4px] bg-white">
+          <KeyIcon
+            code={code}
+            printed={shown}
+            label={shown}
+            className="-m-1 size-8"
+          />
+        </span>
+      )}
+    </HudButton>
+  );
+}
+
+/**
+ * Commandes : T (ou A) tire, R (ou B) reste, F (ou X) sépare une paire, D (ou Y) double. Entre deux manches : l'hôte enchaîne avec N, chacun peut se lever (touche d'interaction, gérée par la chambre) ; aux résultats : B ramène à la chambre.
+ */
 export function BlackjackScreen({
   state,
   sessionId,
   isHost,
   send,
-  chat,
-  onQuit,
-  rewards,
-  onBackToLobby,
 }: {
   state: LobbySnapshot;
   sessionId: string;
   isHost: boolean;
   send: Send;
-  chat: ReactNode;
-  onQuit: () => void;
-  /** Récompenses de fin de session (comptes enregistrés uniquement). */
-  rewards: ServerMessages["rewards"] | null;
-  onBackToLobby: () => void;
 }) {
-  const [achievementTitles, setAchievementTitles] = useState<string[]>([]);
-  const [missionTitles, setMissionTitles] = useState<string[]>([]);
-  useEffect(() => {
-    if (!rewards) return;
-    void loadAchievementTitles(rewards.achievements).then(setAchievementTitles, () => setAchievementTitles(rewards.achievements));
-    void loadMissionTitles(rewards.missions).then(setMissionTitles, () => setMissionTitles(rewards.missions));
-  }, [rewards]);
   const bj = state.blackjack;
-  const device = useInputDevice();
-  const me = bj.players[sessionId];
-  const myTurn = state.phase === "playing" && bj.stage === "playing" && bj.turn === sessionId;
-  // Classement : score décroissant ; à égalité, l'ordre de la table est conservé.
-  const ranking = Object.entries(bj.players).sort(([, a], [, b]) => b.score - a.score);
-
-  // Tirer : T ou bouton de façade bas ; Rester : R ou bouton de façade droit.
+  // Les actions n'apparaissent qu'une fois toutes les cartes distribuées (le croupier les lance une à une depuis le sabot).
+  const expected =
+    Object.values(bj.players).reduce(
+      (n, p) => n + p.cards.length + p.cards2.length,
+      0,
+    ) +
+    bj.dealer.length +
+    (bj.dealerHidden ? 1 : 0);
+  const landed = useDealt((d) => d.landed);
+  const myTurn =
+    state.phase === "playing" &&
+    bj.stage === "playing" &&
+    bj.turn === sessionId &&
+    landed >= expected;
+  const canSplit = myTurn && Boolean(bj.players[sessionId]?.canSplit);
+  const canDouble = myTurn && Boolean(bj.players[sessionId]?.canDouble);
+  const roundEnd = state.phase === "playing" && bj.stage === "roundEnd";
+  const results = state.phase === "results";
+  // Se lever : entre deux manches (même règle que le serveur). La touche est gérée par la chambre.
+  const canStand =
+    (roundEnd || (state.phase === "playing" && bj.stage === "betting")) &&
+    (state.players[sessionId]?.seat ?? -1) >= 0;
+  const interactKey = useKeybinds((k) => k.keys.it);
+  // Mises : étape avant la distribution, avec les jetons du portefeuille (un joueur sans portefeuille, ou sans assez de jetons, ne mise pas).
+  const me0 = bj.players[sessionId];
+  const betting =
+    state.phase === "playing" &&
+    bj.stage === "betting" &&
+    Boolean(me0) &&
+    me0!.balance >= BLACKJACK_MIN_BET &&
+    me0!.bet === 0;
+  const betPlaced =
+    state.phase === "playing" && bj.stage === "betting" && (me0?.bet ?? 0) > 0;
+  // Jetons choisis pour la mise (leur somme est la mise), dans l'ordre où on les pose.
+  const [stack, setStack] = useState<number[]>([]);
+  const pending = stack.reduce((sum, c) => sum + c, 0);
+  // La table montre déjà les jetons choisis devant la place, avant la validation.
   useEffect(() => {
-    if (!myTurn) return;
-    const act = (action: "hit" | "stand") => send("bjAction", { action });
+    useBetPreview.setState({ chips: betting ? stack : [] });
+    return () => useBetPreview.setState({ chips: [] });
+  }, [betting, stack]);
+  // Les jetons de la manche précédente sont repris d'office (modifiables avec les jetons ou « Effacer »), dans la limite du solde et de la mise maximale.
+  const lastChips = useRef<number[]>([]);
+  useEffect(() => {
+    if (betPlaced && me0!.chips)
+      lastChips.current = me0!.chips.split(",").map(Number);
+  }, [betPlaced]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const cap = Math.min(BLACKJACK_MAX_BET, Math.max(0, me0?.balance ?? 0));
+    const keep: number[] = [];
+    for (const chip of lastChips.current)
+      if (keep.reduce((sum, c) => sum + c, 0) + chip <= cap) keep.push(chip);
+    setStack(keep);
+  }, [bj.round]); // eslint-disable-line react-hooks/exhaustive-deps
+  const betCap = Math.min(BLACKJACK_MAX_BET, me0?.balance ?? 0);
+  // Le solde du portefeuille change quand on mise et quand les gains sont versés : l'en-tête se met à jour.
+  const betKey = `${me0?.bet ?? 0}-${roundEnd}-${results}`;
+  useEffect(() => {
+    if (me0 && me0.balance >= 0) void useEconomy.getState().refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [betKey]);
+  // « Vous : X / Croupier : Y », une fois les cartes distribuées (le croupier ne compte que ses cartes visibles). Deux totaux après une séparation.
+  const me = bj.players[sessionId];
+  const total = (cards: readonly { rank: string }[]) =>
+    handValue(cards.map((c) => ({ rank: c.rank as Rank }))).total;
+  const score =
+    state.phase === "playing" &&
+    me &&
+    me.cards.length > 0 &&
+    bj.stage !== "finished" &&
+    bj.stage !== "betting" &&
+    landed >= expected
+      ? `Vous : ${me.cards2.length > 0 ? `${total(me.cards)} et ${total(me.cards2)}` : total(me.cards)} | Croupier : ${total(bj.dealer)}`
+      : null;
+  // Fin de manche : le résultat du joueur (deux, après une séparation) (affiché au-dessus du score).
+  const label = { win: "Gagné", push: "Égalité", loss: "Perdu" } as const;
+  // Gain net de la manche (jetons rendus moins mise), quand on a misé.
+  const net = me?.staked ? me.net : null;
+  const result =
+    (roundEnd || bj.stage === "betting") && me?.result
+      ? [me.result, me.cards2.length > 0 ? me.result2 : ""]
+          .filter((r): r is keyof typeof label => r in label)
+          // Blackjack naturel (21 en deux cartes, sans séparation) gagné : mention spéciale.
+          .map((r) =>
+            r === "win" && me.status === "blackjack"
+              ? "Gagné par Blackjack"
+              : label[r],
+          )
+          .join(" · ")
+      : null;
+
+  // Le résultat de la manche reste affiché pendant la phase de mise suivante (le serveur le garde jusqu'à la distribution).
+  const kept = result ? { text: result, net } : null;
+
+  useEffect(() => {
     const detach = attachInput((code) => {
-      if (code === "KeyT") act("hit");
-      if (code === "KeyR") act("stand");
+      if (myTurn && code === "KeyT") send("bjAction", { action: "hit" });
+      if (myTurn && code === "KeyR") send("bjAction", { action: "stand" });
+      if (canSplit && code === "KeyF") send("bjAction", { action: "split" });
+      if (canDouble && code === "KeyD") send("bjAction", { action: "double" });
+      if (isHost && results && code === "KeyB") send("backToLobby", {});
     });
     const poll = setInterval(() => {
       for (const button of readGamepadPresses()) {
-        if (button === 0) act("hit");
-        if (button === 1) act("stand");
+        if (myTurn && button === 0) send("bjAction", { action: "hit" });
+        if (myTurn && button === 1) send("bjAction", { action: "stand" });
+        if (canSplit && button === 2) send("bjAction", { action: "split" });
+        if (canDouble && button === 3) send("bjAction", { action: "double" });
+        if (isHost && results && button === 1) send("backToLobby", {});
       }
     }, 50);
     return () => {
       detach();
       clearInterval(poll);
     };
-  }, [myTurn, send]);
+  }, [myTurn, canSplit, canDouble, roundEnd, results, isHost, send]);
 
-  const identities = Object.fromEntries(Object.entries(state.players).map(([id, player]) => [id, { id: player.id, avatar: player.avatar, cosmetics: player.cosmetics }]));
-
-  if (state.phase === "results") {
-    return (
-      <>
-        <BlackjackTable3D blackjack={bj} identities={identities} />
-        <div className="rise-in fixed inset-0 z-10 flex items-center justify-center p-4">
-        <Card className="w-full max-w-xl">
-          <h2 className="text-4xl text-violet">Résultats</h2>
-          <p className="text-sm font-bold text-ink/70">
-            Blackjack · {bj.round} {bj.round > 1 ? "manches" : "manche"}
-          </p>
-          <table className="mt-4 w-full text-left font-bold">
-            <thead className="text-xs uppercase text-ink/60">
-              <tr>
-                <th className="py-1">Rang</th>
-                <th>Joueur</th>
-                <th>Victoires</th>
-                <th>Égalités</th>
-                <th>Défaites</th>
-                <th className="text-right">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranking.map(([id, player], i) => {
-                // Les ex æquo partagent le même rang.
-                const rank = ranking.findIndex(([, other]) => other.score === player.score) + 1;
-                return (
-                  <tr key={id} className={rank === 1 ? "bg-sun" : i % 2 ? "bg-cream" : ""}>
-                    <td className="rounded-l-lg px-2 py-1.5 font-display text-xl">{rank}</td>
-                    <td>
-                      {player.name}
-                      {id === sessionId && " (vous)"}
-                    </td>
-                    <td>{player.wins}</td>
-                    <td>{player.pushes}</td>
-                    <td>{player.losses}</td>
-                    <td className="rounded-r-lg px-2 text-right font-display text-xl">{player.score}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {rewards ? (
-            <div className="mt-4 rounded-xl border-2 border-ink bg-cream p-3 font-bold">
-              <p>
-                +{rewards.xpGained} XP · Niveau {levelProgress(rewards.xp).level} ({rewards.xp} XP au total)
-              </p>
-              <p>
-                +{rewards.tokens} jetons · solde {rewards.balance}
-              </p>
-              {achievementTitles.length > 0 && <p className="text-sm">Succès débloqués : {achievementTitles.join(", ")}</p>}
-              {missionTitles.length > 0 && <p className="text-sm">Missions accomplies : {missionTitles.join(", ")}</p>}
-            </div>
-          ) : (
-            <p className="mt-4 text-xs font-bold text-ink/70">Les invités ne gagnent ni XP ni succès : créez un compte pour conserver votre progression.</p>
-          )}
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            {isHost ? (
-              <Button
-                variant="accent"
-                onClick={() => {
-                  onBackToLobby();
-                  send("backToLobby", {});
-                }}
-              >
-                Retour au lobby
-              </Button>
-            ) : (
-              <p className="text-sm font-bold text-ink/70">L'hôte ramène tout le monde au lobby.</p>
-            )}
-            <Button variant="plain" onClick={onQuit}>
-              Quitter
-            </Button>
-          </div>
-        </Card>
-        </div>
-      </>
-    );
-  }
-
-  const turnName = bj.players[bj.turn]?.name;
-  const banner =
-    bj.stage === "playing"
-      ? myTurn
-        ? `À vous de jouer · ${bj.seconds} s`
-        : `Tour de ${turnName ?? "…"} · ${bj.seconds} s`
-      : bj.stage === "dealer"
-        ? "Le croupier joue…"
-        : `Manche ${bj.round} terminée · suivante dans ${bj.seconds} s`;
-
+  if (
+    !myTurn &&
+    !roundEnd &&
+    !score &&
+    !betting &&
+    !betPlaced &&
+    !(isHost && results)
+  )
+    return null;
+  const stake = (me0?.bet ?? 0) + (me0?.bet2 ?? 0);
+  const bubble =
+    "rounded-2xl px-5 py-2 text-center text-sm font-semibold whitespace-nowrap shadow-[0_6px_20px_rgba(15,13,34,0.35)]";
   return (
     <>
-      <BlackjackTable3D blackjack={bj} identities={identities} />
-
-      <div className="fixed left-1/2 top-4 z-10 flex -translate-x-1/2 flex-col items-center gap-1.5">
-        <p role="status" className={`rounded-full border-3 border-ink px-4 py-1 font-display text-lg font-bold shadow-chunk-sm ${myTurn ? "bg-sun" : "bg-white"}`}>
-          {banner}
-        </p>
-        <p className="rounded-full bg-white/85 px-3 py-0.5 text-sm font-bold">
-          Croupier : {bj.dealer.length ? total(bj.dealer) : "–"}
-          {bj.dealerHidden && " + carte cachée"}
-        </p>
-      </div>
-
-      <aside className="rise-in fixed left-4 top-24 z-10 flex max-h-[calc(100dvh-7rem)] w-72 flex-col gap-4 overflow-y-auto pb-2 pr-1">
-        <Card className="!p-4">
-          <h2 className="text-2xl text-violet">Manche {bj.round}</h2>
-          <ul className="mt-2 flex flex-col gap-1.5" aria-label="Classement">
-            {ranking.map(([id, player]) => (
-              <li key={id} className={`rounded-xl border-2 px-2 py-1 text-sm font-bold ${bj.turn === id ? "border-ink bg-sun" : "border-transparent"}`}>
-                <div className="flex items-center gap-2">
-                  <span className="grow">
-                    {player.name}
-                    {id === sessionId && " (vous)"}
-                  </span>
-                  <span className="font-display text-lg">{player.score} pts</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-ink/70">
-                  <span>Main : {total(player.cards)}</span>
-                  <Badge className={player.result === "win" ? "bg-turquoise" : player.result === "loss" || player.status === "bust" ? "bg-coral" : "bg-white"}>
-                    {statusLabel(player)}
-                  </Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Button className="mt-3 !px-3 !py-1 !text-sm" variant="danger" onClick={onQuit}>
-            Quitter la table
-          </Button>
-        </Card>
-      </aside>
-
-      <aside className="rise-in fixed right-4 top-40 z-10 w-80">{chat}</aside>
-
-      <div className="fixed bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
-        {bj.stage === "roundEnd" ? (
-          isHost ? (
-            <div className="flex gap-3">
-              <Button variant="accent" onClick={() => send("bjNext", {})}>
-                Manche suivante
-              </Button>
-              <Button variant="plain" onClick={() => send("bjEnd", {})}>
-                Terminer la session
-              </Button>
-            </div>
-          ) : (
-            <p className="rounded-full bg-white/85 px-3 py-1 text-sm font-bold">L'hôte enchaîne ou termine la session.</p>
-          )
-        ) : (
-          me && (
+      {(score || roundEnd || myTurn || betting || betPlaced) && (
+        // Au-dessus des boutons d'action : le score pendant la manche ; en fin de manche, le résultat, le score puis le compte à rebours.
+        <div className="fixed bottom-24 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+          {/* Résultat de la manche précédente et portefeuille sur une même ligne ; après la mise, le résultat reste seul. */}
+          {(betting || betPlaced) && (kept || betting) && (
+            <HudPanel role="status" className={bubble}>
+              {kept && (
+                <>
+                  {kept.text}
+                  {kept.net !== null && (
+                    <>
+                      {" ("}
+                      <Amount value={kept.net} sign />
+                      {")"}
+                    </>
+                  )}
+                </>
+              )}
+              {kept && betting && " | "}
+              {betting && (
+                <>
+                  Portefeuille : <Amount value={me0!.balance} />
+                </>
+              )}
+            </HudPanel>
+          )}
+          {betting && (
+            <HudPanel role="timer" className={bubble}>
+              Temps pour miser : {bj.seconds} s
+            </HudPanel>
+          )}
+          {betPlaced && (
             <>
-              <p className="rounded-full bg-white/85 px-3 py-0.5 text-sm font-bold">
-                Votre main : {total(me.cards)} · {statusLabel(me)}
-              </p>
-              <div className="flex gap-3">
-                <Button variant="calm" disabled={!myTurn} onClick={() => send("bjAction", { action: "hit" })}>
-                  Tirer
-                </Button>
-                <Button variant="accent" disabled={!myTurn} onClick={() => send("bjAction", { action: "stand" })}>
-                  Rester
-                </Button>
-              </div>
-              <p className="rounded-full bg-white/80 px-3 py-0.5 text-xs font-bold text-ink/80">
-                {device === "gamepad" ? "Manette : bouton bas pour tirer · bouton droit pour rester" : "Clavier : T pour tirer · R pour rester"}
-              </p>
+              <HudPanel role="status" className={bubble}>
+                Mise : <Amount value={stake} />
+              </HudPanel>
+              <HudPanel role="status" className={bubble}>
+                En attente des autres joueurs… ({bj.seconds} s)
+              </HudPanel>
             </>
-          )
-        )}
-      </div>
+          )}
+          {result && roundEnd && (
+            <HudPanel role="status" className={bubble}>
+              {result}
+              {net !== null && (
+                <>
+                  {" ("}
+                  <Amount value={net} sign />
+                  {")"}
+                </>
+              )}
+            </HudPanel>
+          )}
+          {score && (
+            <HudPanel role="status" className={bubble}>
+              {score}
+            </HudPanel>
+          )}
+          {stake > 0 && !betPlaced && !roundEnd && (
+            <HudPanel role="status" className={bubble}>
+              Mise : <Amount value={stake} />
+            </HudPanel>
+          )}
+          {myTurn && (
+            <HudPanel
+              role="timer"
+              className="rounded-2xl px-5 py-2 text-center text-sm font-semibold whitespace-nowrap shadow-[0_6px_20px_rgba(15,13,34,0.35)]"
+            >
+              Temps restant : {bj.seconds} s
+            </HudPanel>
+          )}
+        </div>
+      )}
+      {betting && (
+        <HudPanel
+          role="group"
+          aria-label="Mise"
+          className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-2xl p-2 shadow-[0_6px_20px_rgba(15,13,34,0.35)]"
+        >
+          {BLACKJACK_CHIPS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-label={`Ajouter ${value} à la mise`}
+              disabled={pending + value > betCap}
+              onClick={() => setStack((chips) => [...chips, value])}
+              style={{ background: CHIP_STYLE[value]?.color }}
+              className="grid size-12 place-items-center rounded-full border-[3px] border-dashed border-white/85 text-sm font-bold text-white shadow-[inset_0_0_0_3px_rgba(255,255,255,0.2)] transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {value}
+            </button>
+          ))}
+          <HudButton
+            variant="outline"
+            disabled={pending === 0}
+            onClick={() => setStack([])}
+          >
+            Effacer
+          </HudButton>
+          <HudButton
+            variant="primary"
+            disabled={pending < BLACKJACK_MIN_BET}
+            onClick={() => send("bjBet", { amount: pending, chips: stack })}
+          >
+            Miser {pending > 0 ? pending.toLocaleString("fr-FR") : ""}
+          </HudButton>
+          <ActionButton
+            code={interactKey}
+            pad="a"
+            label="Se lever"
+            variant="outline"
+            onClick={() => send("standUp", {})}
+          />
+        </HudPanel>
+      )}
+      {(myTurn || (canStand && !betting) || (isHost && results)) && (
+        <HudPanel
+          role="group"
+          aria-label="Actions"
+          className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 gap-2 rounded-2xl p-2 shadow-[0_6px_20px_rgba(15,13,34,0.35)]"
+        >
+          {myTurn && (
+            <>
+              <ActionButton
+                code="KeyT"
+                pad="a"
+                label="Tirer"
+                variant="primary"
+                onClick={() => send("bjAction", { action: "hit" })}
+              />
+              <ActionButton
+                code="KeyR"
+                pad="b"
+                label="Rester"
+                variant="outline"
+                onClick={() => send("bjAction", { action: "stand" })}
+              />
+              {canDouble && (
+                <ActionButton
+                  code="KeyD"
+                  pad="y"
+                  label="Doubler"
+                  variant="soft"
+                  onClick={() => send("bjAction", { action: "double" })}
+                />
+              )}
+              {canSplit && (
+                <ActionButton
+                  code="KeyF"
+                  pad="x"
+                  label="Séparer"
+                  variant="soft"
+                  onClick={() => send("bjAction", { action: "split" })}
+                />
+              )}
+            </>
+          )}
+          {canStand && (
+            <ActionButton
+              code={interactKey}
+              pad="a"
+              label="Se lever"
+              variant="outline"
+              onClick={() => send("standUp", {})}
+            />
+          )}
+          {isHost && results && (
+            <ActionButton
+              code="KeyB"
+              pad="b"
+              label="Retour à la chambre"
+              variant="primary"
+              onClick={() => send("backToLobby", {})}
+            />
+          )}
+        </HudPanel>
+      )}
     </>
   );
 }

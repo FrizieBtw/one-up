@@ -43,17 +43,17 @@ test("blackjack : jointure par code, lancement, deux manches, résultats, retour
 
   // Lancement : réservé à l'hôte, annulable.
   await openConsole(bob);
-  await expect(bob.getByRole("button", { name: "Lancer la partie" })).toHaveCount(0);
+  await expect(bob.getByRole("button", { name: "Lancer le jeu" })).toHaveCount(0);
   await bob.keyboard.press("Escape");
   await openConsole(alice);
-  await alice.getByRole("button", { name: "Lancer la partie" }).click();
+  await alice.getByRole("button", { name: "Lancer le jeu" }).click();
   await expect(bob.getByText("La partie démarre dans")).toBeVisible();
   // Le compte à rebours dure 5 s : un clic classique attend que la page soit « stable » et peut y perdre la course
   // quand la machine est chargée. On déclenche donc le clic directement.
   await alice.getByRole("button", { name: "Annuler le lancement" }).dispatchEvent("click");
   await expect(bob.getByText("Lancement annulé.")).toBeVisible();
   await openConsole(alice);
-  await alice.getByRole("button", { name: "Lancer la partie" }).click();
+  await alice.getByRole("button", { name: "Lancer le jeu" }).click();
 
   // Après les 5 s de compte à rebours, tout le monde arrive en jeu (la manche 1 s'affiche juste après).
   // Son : réglage accessible et mémorisé.
@@ -95,8 +95,8 @@ test("blackjack : jointure par code, lancement, deux manches, résultats, retour
   await bob.waitForTimeout(600);
   await bob.screenshot({ path: "test-results/10-resultats.png" });
 
-  await expect(bob.getByRole("button", { name: "Retour au lobby" })).toHaveCount(0);
-  await alice.getByRole("button", { name: "Retour au lobby" }).click();
+  await expect(bob.getByRole("button", { name: "Retour à la chambre" })).toHaveCount(0);
+  await alice.getByRole("button", { name: "Retour à la chambre" }).click();
   for (const page of [alice, bob]) {
     await expect(page.getByText("Chambre de Alice")).toBeVisible(); // retour dans la chambre
     await expect(page.getByRole("button", { name: "Joueurs : 2 sur 4" })).toBeVisible();

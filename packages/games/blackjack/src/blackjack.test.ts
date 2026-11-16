@@ -42,5 +42,8 @@ describe("blackjack rules", () => {
     expect(resolveHand(hand("A", "K"), hand("7", "7", "7"))).toBe("win"); // naturel contre 21 en trois cartes
     expect(resolveHand(hand("7", "7", "7"), hand("A", "K"))).toBe("loss");
     expect(resolveHand(hand("A", "K"), hand("A", "Q"))).toBe("push");
+    // Main issue d'une séparation : un 21 à deux cartes n'est pas un naturel.
+    expect(resolveHand(hand("A", "K"), hand("7", "7", "7"), true)).toBe("push");
+    expect(resolveHand(hand("A", "K"), hand("K", "9"), true)).toBe("win");
   });
 });

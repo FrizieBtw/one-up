@@ -88,7 +88,7 @@ HTTP :
 | `POST /presence/ping` | un compte se signale en ligne (jeton `Authorization: Bearer`, comptes seulement) |
 | `GET /presence` | présence des amis du compte, filtrée par leurs réglages |
 
-Création : `client.create("lobby", { gameId, isPublic })`. Le code du salon (6 caractères) est l'identifiant de salle : jointure par `client.joinById(code)`.
+Création : `client.create("lobby", { gameId, access })`. Le code du salon (6 caractères) est l'identifiant de salle : jointure par `client.joinById(code)`.
 
 Client vers serveur :
 
@@ -113,7 +113,7 @@ Un message qui ne respecte pas son schéma zod déconnecte le client (comporteme
 
 Serveur vers client : `chat` (texte filtré), `emote`, `notice` (`settingChanged`, `capacityChanged`, `hostChanged`, `proposalCreated`, `proposalResolved`), `error` (`RATE_LIMITED`, `INVALID`, `FORBIDDEN`).
 
-État synchronisé (`LobbySnapshot`) : `code`, `gameId`, `isPublic`, `hostSessionId`, `capacity`, `phase`, `settings` (JSON), `players` (avec position `x`, `z` et direction `dx`, `dz`), `proposals`.
+État synchronisé (`LobbySnapshot`) : `code`, `gameId`, `access` (`closed` | `public` | `friends`), `hostSessionId`, `capacity`, `phase`, `settings` (JSON), `players` (avec position `x`, `z` et direction `dx`, `dz`), `proposals`.
 
 Règles de salon :
 

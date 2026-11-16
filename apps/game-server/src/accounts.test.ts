@@ -31,6 +31,12 @@ vi.mock("./persistence", () => ({
     recorded.push({ sessionId, gameId, rounds, participants });
     return participants.map((p) => ({ userId: p.user_id, xpGained: 65, xp: 165, achievements: ["first_session"], tokensGained: 94, balance: 294, missions: ["daily_play"] }));
   },
+  // Amis : Alice et Bob seulement.
+  areFriends: async (a: string, b: string) => [a, b].sort().join() === "alice,bob",
+  // Mises : pas de portefeuille dans ce test (les comptes jouent sans mise).
+  tableBalance: async () => null,
+  tableBet: async () => null,
+  tablePayout: async () => null,
   fetchFriendsWithPresenceSetting: async () => [
     { id: "bob", visibility: "everyone" },
     { id: "carol", visibility: "nobody" },
@@ -77,10 +83,10 @@ describe("account features", () => {
   it("loads saved avatars (validated), sends rewards to the right account, and tracks presence through a session", async () => {
     const card = (rank: string) => ({ rank, suit: "spades" }) as RuleCard;
     const saved = { ...tuning };
-    // Alice : blackjack naturel. Bob : 16. Croupier : 9 + 8 = 17.
-    Object.assign(tuning, { tickMs: 30, dealerStepMs: 10, deck: () => [card("A"), card("K"), card("10"), card("6"), card("9"), card("8")] });
+    // Alice : blackjack naturel. Bob : 16. Croupier : 9 + 8 = 17. Ordre : Alice, Bob, croupier (visible), Alice, Bob, croupier (cachée).
+    Object.assign(tuning, { introMs: 0, tickMs: 30, dealerStepMs: 10, deck: () => [card("A"), card("10"), card("9"), card("K"), card("6"), card("8")] });
     try {
-      const alice = await join("user:alice:Alice", (sdk) => sdk.create(LOBBY_ROOM_NAME, { gameId: "blackjack", isPublic: false }));
+      const alice = await join("user:alice:Alice", (sdk) => sdk.create(LOBBY_ROOM_NAME, { gameId: "blackjack", access: "closed" }));
       const bob = await join("user:bob:Bob", (sdk) => sdk.joinById(alice.room.roomId));
       await settle();
 
@@ -114,6 +120,9 @@ describe("account features", () => {
       await settle();
       alice.room.send("start", {});
       await until(() => alice.state().phase === "playing", "partie lancée");
+      alice.room.send("sitAt", { seat: 1 }); // on joue de la place la plus haute à la plus basse : Alice, puis Bob
+      bob.room.send("sitAt", { seat: 0 });
+      await until(() => alice.state().blackjack.round === 1, "première manche");
       expect(presence.get("bob").status).toBe("playing");
 
       bob.room.send("bjAction", { action: "stand" }); // pas son tour : Alice a un naturel, Bob joue en premier
@@ -143,9 +152,27 @@ describe("account features", () => {
     }
   });
 
+  it("lets only the host's friends into a friends-only room, and the host can change the access", async () => {
+    const alice = await join("user:alice:Alice", (sdk) => sdk.create(LOBBY_ROOM_NAME, { gameId: "blackjack", access: "friends" }));
+    const code = alice.room.roomId;
+    const bob = await join("user:bob:Bob", (sdk) => sdk.joinById(code));
+    expect(bob.room.sessionId).toBeTruthy();
+    await expect(join("user:carol:Carol", (sdk) => sdk.joinById(code))).rejects.toThrow(/FRIENDS_ONLY/);
+    const { issueGuestToken } = await import("./auth");
+    await expect(join(issueGuestToken("Gus").token, (sdk) => sdk.joinById(code))).rejects.toThrow(/FRIENDS_ONLY/);
+    // L'hôte rouvre la chambre : Carol entre.
+    alice.room.send("setAccess", { access: "closed" });
+    await settle();
+    const carol = await join("user:carol:Carol", (sdk) => sdk.joinById(code));
+    expect(carol.room.sessionId).toBeTruthy();
+    await carol.room.leave();
+    await bob.room.leave();
+    await alice.room.leave();
+  });
+
   it("only gives guests no avatar and no presence", async () => {
     const { issueGuestToken } = await import("./auth");
-    const guest = await join(issueGuestToken("Gus").token, (sdk) => sdk.create(LOBBY_ROOM_NAME, { gameId: "kart", isPublic: false }));
+    const guest = await join(issueGuestToken("Gus").token, (sdk) => sdk.create(LOBBY_ROOM_NAME, { gameId: "kart", access: "closed" }));
     await settle();
     expect(guest.state().players[guest.room.sessionId]!.avatar).toBe("");
     expect(presence.get(guest.state().players[guest.room.sessionId]!.id).status).toBe("offline");

@@ -22,9 +22,16 @@ export interface Identity {
 
 // ---------- Création / accès salon ----------
 
+/**
+ * Accès à une chambre : fermée (on n'y entre qu'avec le code, elle n'est listée nulle part), publique (listée dans les chambres
+ * ouvertes) ou amis seulement (seuls les amis de l'hôte y entrent, avec le code).
+ */
+export const ROOM_ACCESS = ["closed", "public", "friends"] as const;
+export type RoomAccess = (typeof ROOM_ACCESS)[number];
+
 export const createLobbyOptionsSchema = z.object({
   gameId: z.enum(GAME_IDS),
-  isPublic: z.boolean(),
+  access: z.enum(ROOM_ACCESS),
 });
 export type CreateLobbyOptions = z.infer<typeof createLobbyOptionsSchema>;
 
@@ -34,6 +41,8 @@ export const JoinError = {
   AlreadyInRoom: "ALREADY_IN_ROOM",
   InProgress: "IN_PROGRESS",
   Kicked: "KICKED",
+  /** Chambre réservée aux amis de l'hôte. */
+  FriendsOnly: "FRIENDS_ONLY",
 } as const;
 
 // ---------- Messages client → serveur (toujours validés côté serveur) ----------
@@ -51,13 +60,17 @@ export const clientMessages = {
   /** Hôte, salon en attente : change de jeu (les réglages reviennent aux valeurs par défaut du nouveau jeu). */
   setGame: z.object({ gameId: z.string().max(40) }),
   /** Hôte : ouvre le salon à la recherche publique, ou le rend privé. */
-  setPublic: z.object({ isPublic: z.boolean() }),
+  setAccess: z.object({ access: z.enum(ROOM_ACCESS) }),
   /** Position de départ : la position locale du joueur quand il crée son salon (acceptée une seule fois, juste après l'arrivée). */
   spawnAt: z.object({ x: z.number(), z: z.number() }),
   /** Le joueur s'assoit au sol (immobile longtemps) ou se relève : les autres voient l'animation. */
   sit: z.object({ sit: z.boolean() }),
   /** Le joueur vient d'enregistrer son avatar ou ses objets équipés : le serveur les relit en base et les montre aux autres. */
   refreshAvatar: z.object({}),
+  /** Blackjack : s'asseoir à une place libre de la table (avant la première manche ou entre deux manches). */
+  sitAt: z.object({ seat: z.number().int().min(0).max(7) }),
+  /** Blackjack : se lever de sa place (entre deux manches ; jamais le dernier joueur assis). */
+  standUp: z.object({}),
   /** Hôte : ferme la chambre : tout le monde en sort et son code n'existe plus. */
   closeRoom: z.object({}),
   /** Hôte : exclut un joueur du salon (il ne peut plus y revenir tant que le salon existe). */
@@ -83,8 +96,16 @@ export const clientMessages = {
   cancelStart: empty,
   /** Hôte, écran de résultats : retour au lobby. */
   backToLobby: empty,
+  /** Hôte : arrête la partie en cours et ramène tout le monde dans la chambre. */
+  stopGame: empty,
   // Blackjack
-  bjAction: z.object({ action: z.enum(["hit", "stand"]) }),
+  bjAction: z.object({ action: z.enum(["hit", "stand", "split", "double"]) }),
+  /** Mise (en jetons du portefeuille) pour la manche, pendant l'étape de mise. */
+  /** `chips` : les jetons posés, un par valeur (leur somme est la mise) ; sans eux, la mise est découpée automatiquement. */
+  bjBet: z.object({
+    amount: z.number().int().min(1).max(100000),
+    chips: z.array(z.number().int().min(1).max(100000)).max(80).optional(),
+  }),
   /** Hôte, entre deux manches : manche suivante immédiate, ou fin de session. */
   bjNext: empty,
   bjEnd: empty,
@@ -112,7 +133,7 @@ export interface ServerMessages {
     | { type: "playerJoined"; name: string }
     | { type: "playerLeft"; name: string }
     | { type: "gameChanged"; gameId: string }
-    | { type: "accessChanged"; isPublic: boolean }
+    | { type: "accessChanged"; access: RoomAccess }
     | { type: "proposalCreated"; name: string; key: string }
     | { type: "proposalResolved"; key: string; accepted: boolean }
     | { type: "launchCancelled" };
@@ -157,8 +178,12 @@ export interface LobbyPlayerSnapshot {
   run: boolean;
   /** Le joueur est en plein saut (animation). */
   jump: boolean;
+  /** Hauteur des pieds au-dessus du sol (saut, ou dessus d'un meuble bas). */
+  y: number;
   /** Le joueur est assis au sol (attente prolongée). */
   sit: boolean;
+  /** Place à la table de blackjack (0 à 7), ou -1 : debout dans la chambre. */
+  seat: number;
   /** Couleur choisie (PLAYER_COLORS), ou chaîne vide : couleur automatique. */
   color: string;
 }
@@ -176,7 +201,7 @@ export interface ProposalSnapshot {
 export interface LobbySnapshot {
   code: string;
   gameId: GameId;
-  isPublic: boolean;
+  access: RoomAccess;
   hostSessionId: string;
   capacity: number;
   phase: LobbyPhase;
@@ -203,6 +228,27 @@ export interface BlackjackPlayerSnapshot {
   status: "playing" | "stood" | "bust" | "blackjack";
   /** Résultat de la manche, vide tant qu'elle n'est pas résolue. */
   result: "" | "win" | "push" | "loss";
+  /** Seconde main, après une séparation (vide sinon) : ses cartes, son statut et son résultat. */
+  cards2: CardSnapshot[];
+  status2: "" | "playing" | "stood" | "bust";
+  result2: "" | "win" | "push" | "loss";
+  /** Main jouée en ce moment (0 ou 1). */
+  hand: number;
+  /** Le joueur peut séparer sa paire maintenant. */
+  canSplit: boolean;
+  /** Le joueur peut doubler maintenant (mise doublée, une seule carte, puis il reste). */
+  canDouble: boolean;
+  /** Mise de la manche (et de la seconde main), jetons rendus en fin de manche, solde du portefeuille (-1 : sans portefeuille, jeu sans mise). */
+  bet: number;
+  bet2: number;
+  /** Jetons posés sur la table pour chaque main : valeurs séparées par des virgules (« 10,25,25 »). */
+  chips: string;
+  chips2: string;
+  payout: number;
+  /** Gain net de la dernière manche (jetons rendus moins mises) et si l'on avait misé : reste affiché pendant la mise suivante. */
+  net: number;
+  staked: boolean;
+  balance: number;
   score: number;
   wins: number;
   pushes: number;
@@ -211,8 +257,10 @@ export interface BlackjackPlayerSnapshot {
 
 export interface BlackjackSnapshot {
   round: number;
+  /** Numéro de distribution : change à chaque distribution de cartes (pas à l'ouverture des mises). */
+  dealNo: number;
   /** playing : tours des joueurs · dealer : le croupier joue · roundEnd : entre deux manches · finished */
-  stage: "playing" | "dealer" | "roundEnd" | "finished";
+  stage: "betting" | "playing" | "dealer" | "roundEnd" | "finished";
   /** Session dont c'est le tour, ou chaîne vide. */
   turn: string;
   /** Secondes restantes : décision du joueur actif (playing) ou avant la manche suivante (roundEnd). */

@@ -7,7 +7,8 @@
  * Écartés : armes et objets (Cigar, HolyWater, WindupKey, Quiver), créatures et tenues qui masquent le corps entier.
  * Relecture visuelle : /dev/avatar-parts/assembly (développement seulement).
  */
-export type AccessorySlot = "hat" | "glasses" | "mask" | "headband" | "cape" | "backpack";
+export type AccessorySlot =
+  "hat" | "glasses" | "mask" | "headband" | "cape" | "backpack";
 
 export interface OutfitEntry {
   id: string;
@@ -26,7 +27,11 @@ export interface AccessoryEntry {
   bone?: string;
 }
 
-const outfit = (id: string, label: string): OutfitEntry => ({ id, label, file: `${id}.glb` });
+const outfit = (id: string, label: string): OutfitEntry => ({
+  id,
+  label,
+  file: `${id}.glb`,
+});
 
 /** Personnages dont le haut et le bas servent de tenues. */
 export const OUTFITS: OutfitEntry[] = [
@@ -54,7 +59,13 @@ export const OUTFITS: OutfitEntry[] = [
   outfit("Caveman", "Homme des cavernes"),
 ];
 
-const acc = (id: string, file: string, slot: AccessorySlot, label: string, extra: { bone?: string } = {}): AccessoryEntry => ({
+const acc = (
+  id: string,
+  file: string,
+  slot: AccessorySlot,
+  label: string,
+  extra: { bone?: string } = {},
+): AccessoryEntry => ({
   id,
   label,
   file: `${file}.glb`,
@@ -73,13 +84,17 @@ export const ACCESSORIES: AccessoryEntry[] = [
   acc("Barbarian_BearHat", "Barbarian", "hat", "Coiffe d'ours"),
   acc("ToySoldier_Hat", "ToySoldier", "hat", "Shako"),
   acc("Clown_Hat", "Clown", "hat", "Chapeau de clown", { bone: "head" }),
-  acc("Driver_Sunglasses", "Driver", "glasses", "Lunettes de soleil", { bone: "head" }),
+  acc("Driver_Sunglasses", "Driver", "glasses", "Lunettes de soleil", {
+    bone: "head",
+  }),
   acc("Lorekeeper_Glasses", "Lorekeeper", "glasses", "Lunettes rondes"),
   acc("Protagonist_A_Glasses", "Protagonist_A", "glasses", "Lunettes carrées"),
   acc("Witch_Glasses", "Witch", "glasses", "Lunettes de sorcière"),
   acc("Engineer_Goggles", "Engineer", "glasses", "Lunettes de protection"),
   acc("Ninja_Mask", "Ninja", "mask", "Masque de ninja"),
-  acc("ActionFigure_Headband", "ActionFigure", "headband", "Bandeau", { bone: "head" }),
+  acc("ActionFigure_Headband", "ActionFigure", "headband", "Bandeau", {
+    bone: "head",
+  }),
   acc("Ninja_Headband", "Ninja", "headband", "Bandeau de ninja"),
   acc("Knight_Cape", "Knight", "cape", "Cape courte"),
   acc("Mage_Cape", "Mage", "cape", "Cape de mage"),

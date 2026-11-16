@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { keepAcrossReloads } from "./hmr";
 import { create } from "zustand";
 import {
   EMOTES,
@@ -178,27 +179,29 @@ interface EconomyState {
   reset(): void;
 }
 
-export const useEconomy = create<EconomyState>((set, get) => ({
-  userId: null,
-  balance: null,
-  shop: [],
-  inventory: [],
-  refresh: async (userId) => {
-    const id = userId ?? get().userId;
-    if (!id || !supabase) return;
-    try {
-      const [shop, inventory, wallet] = await Promise.all([
-        get().shop.length ? Promise.resolve(get().shop) : loadShop(),
-        loadInventory(id),
-        loadWallet(id),
-      ]);
-      set({ userId: id, shop, inventory, balance: wallet.balance });
-    } catch {
-      // réseau ou base indisponible : on garde l'état précédent
-    }
-  },
-  reset: () => set({ userId: null, balance: null, inventory: [] }),
-}));
+export const useEconomy = keepAcrossReloads("stepup:economy", () =>
+  create<EconomyState>((set, get) => ({
+    userId: null,
+    balance: null,
+    shop: [],
+    inventory: [],
+    refresh: async (userId) => {
+      const id = userId ?? get().userId;
+      if (!id || !supabase) return;
+      try {
+        const [shop, inventory, wallet] = await Promise.all([
+          get().shop.length ? Promise.resolve(get().shop) : loadShop(),
+          loadInventory(id),
+          loadWallet(id),
+        ]);
+        set({ userId: id, shop, inventory, balance: wallet.balance });
+      } catch {
+        // réseau ou base indisponible : on garde l'état précédent
+      }
+    },
+    reset: () => set({ userId: null, balance: null, inventory: [] }),
+  })),
+);
 
 const entries = (
   state: Pick<EconomyState, "shop" | "inventory">,

@@ -42,6 +42,24 @@ export interface AvatarPose {
   calm?: boolean;
   /** Pose figée (portrait) : le clip de repos est posé une fois, sans s'animer. */
   frozen?: boolean;
+  /** Assis sur une chaise ou un tabouret (clips Sit_Chair) plutôt qu'au sol. */
+  chair?: boolean;
+  /** Cache le pseudo flottant (vue à la troisième personne : il masquerait les cartes). */
+  hideName?: boolean;
+  /** En chute libre : pose de saut en l'air (Jump_Idle, en boucle). */
+  fall?: boolean;
+  /** Impact : s'effondre (Death_A, joué une fois, reste au sol). */
+  death?: boolean;
+  /** Se relève du sol (Sit_Floor_StandUp, joué une fois). */
+  getUp?: boolean;
+  /** Croupier : prend une carte pour lui (PickUp) ou l'envoie à un joueur (Throw), joué une fois. */
+  cardAction?: "pick" | "throw" | "reveal" | null;
+  /** Position (monde) de la main gauche, renseignée par le corps : la carte distribuée y apparaît. */
+  handWorld?: { x: number; y: number; z: number };
+  /** Change à chaque nouveau geste de carte : rejoue le clip même si le geste est le même qu'avant. */
+  cardTick?: number;
+  /** La hauteur du personnage vient de la simulation (le groupe parent monte et descend) : l'avatar ne s'élève pas de lui-même en sautant. */
+  physics?: boolean;
   /** Joueur distant : posture assise décidée par son propre client (`undefined` pour le joueur local, qui décide seul). */
   forceSeat?: boolean;
 }
@@ -99,7 +117,10 @@ export function Avatar({
   // Le nom suit le saut du personnage.
   const nameSprite = useRef<Sprite>(null);
   useFrame(() => {
-    if (nameSprite.current) nameSprite.current.position.y = 1.32 + (pose.current?.lift ?? 0);
+    if (nameSprite.current) {
+      nameSprite.current.position.y = 1.32 + (pose.current?.lift ?? 0);
+      nameSprite.current.visible = !pose.current?.hideName;
+    }
   });
   useEffect(() => () => label?.texture.dispose(), [label]);
 
@@ -122,7 +143,11 @@ export function Avatar({
       )}
 
       {label && (
-        <sprite ref={nameSprite} position-y={1.32} scale={[0.26 * label.aspect, 0.26, 1]}>
+        <sprite
+          ref={nameSprite}
+          position-y={1.32}
+          scale={[0.26 * label.aspect, 0.26, 1]}
+        >
           <spriteMaterial
             map={label.texture}
             transparent

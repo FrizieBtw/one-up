@@ -161,6 +161,19 @@ export async function fetchAvatar(userId: string): Promise<string> {
   return config ? JSON.stringify(config) : "";
 }
 
+/** Deux comptes sont-ils amis ? (faux sans Supabase ou en cas d'erreur : l'accès « amis seulement » reste fermé) */
+export async function areFriends(a: string, b: string): Promise<boolean> {
+  if (!admin) return false;
+  const [low, high] = a < b ? [a, b] : [b, a]; // une seule ligne par paire, ordonnée
+  const { data, error } = await admin
+    .from("friendships")
+    .select("user_a")
+    .eq("user_a", low)
+    .eq("user_b", high)
+    .limit(1);
+  return !error && (data?.length ?? 0) > 0;
+}
+
 /** Amis d'un compte et réglage de présence de chacun. */
 export async function fetchFriendsWithPresenceSetting(
   userId: string,
@@ -184,3 +197,30 @@ export async function fetchFriendsWithPresenceSetting(
   // Valeur par défaut de la base : présence visible des amis.
   return ids.map((id) => ({ id, visibility: byUser.get(id) ?? "friends" }));
 }
+
+// ---------- Mises à la table (portefeuille) ----------
+
+async function tableRpc(
+  fn: "table_balance" | "table_bet" | "table_payout",
+  args: Record<string, unknown>,
+): Promise<number | null> {
+  if (!admin) return null;
+  const { data, error } = await admin.rpc(fn, args);
+  if (error) {
+    logFailure(`${fn}_failed`, { ...args, message: error.message });
+    return null;
+  }
+  return typeof data === "number" ? data : null;
+}
+
+/** Solde d'un compte pour miser, ou null (Supabase absent ou en erreur) : sans solde connu, le joueur joue sans mise. */
+export const tableBalance = (userId: string) =>
+  tableRpc("table_balance", { p_user: userId });
+
+/** Mise : débite le compte. Renvoie le nouveau solde, ou null si refusée (solde insuffisant, mise déjà enregistrée, erreur). */
+export const tableBet = (userId: string, amount: number, ref: string) =>
+  tableRpc("table_bet", { p_user: userId, p_amount: amount, p_ref: ref });
+
+/** Gain : crédite le compte (mise rendue + gain). Renvoie le nouveau solde, ou null (déjà versé, erreur). */
+export const tablePayout = (userId: string, amount: number, ref: string) =>
+  tableRpc("table_payout", { p_user: userId, p_amount: amount, p_ref: ref });

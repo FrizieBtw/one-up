@@ -4,6 +4,9 @@ import {
   ROOM_HALF,
   clampDirection,
   filterChat,
+  BLACKJACK_TABLE,
+  blockedByBlackjack,
+  pushOutOfBlackjack,
   stepLobbyPosition,
   clientMessages,
   defaultSettings,
@@ -261,5 +264,50 @@ describe("cosmetics and emotes", () => {
       "spin",
       "bow",
     ]);
+  });
+});
+
+describe("blackjack table obstacles", () => {
+  const { x, z } = BLACKJACK_TABLE;
+  it("blocks the table only once it has landed, and pushes a player standing under it outward", () => {
+    expect(blockedByBlackjack(x + 0.3, z + 0.3, 1)).toBe(false); // elle tombe encore
+    expect(blockedByBlackjack(x + 0.3, z + 0.3, 5)).toBe(true);
+    const position = { x: x + 0.3, z: z + 0.3 };
+    for (
+      let i = 0;
+      i < 200 && blockedByBlackjack(position.x, position.z, 5);
+      i++
+    )
+      pushOutOfBlackjack(position, 5, 0.05);
+    expect(blockedByBlackjack(position.x, position.z, 5)).toBe(false);
+  });
+});
+
+describe("jump onto low obstacles", () => {
+  it("lets a jumper climb onto the desk but not walk through it, and the mirror stays out of reach", async () => {
+    const { groundHeight, startJump, stepVertical, stepLobbyPosition } = await import("./index");
+    // À pied : le bureau bloque (dessus à 0,48).
+    const walker = { x: 1.6, z: -1.8 };
+    for (let i = 0; i < 60; i++) stepLobbyPosition(walker, { x: 0, z: -1 }, 0.05);
+    expect(walker.z).toBeGreaterThan(-2.05);
+    // Saut : on monte sur le bureau et on y reste.
+    const jumper = { x: 0.95, z: -1.8 }; // x libre sur le bureau (ni écran, ni console, ni manette)
+    const body = { y: 0, vy: 0 };
+    expect(startJump(body, groundHeight(jumper.x, jumper.z, true, null))).toBe(true);
+    for (let i = 0; i < 80; i++) {
+      stepLobbyPosition(jumper, { x: 0, z: -1 }, 0.025, false, [], undefined, true, body.y);
+      stepVertical(body, groundHeight(jumper.x, jumper.z, true, null), 0.025);
+    }
+    expect(jumper.z).toBeLessThan(-2.1); // dessus du bureau
+    expect(body.y).toBeCloseTo(0.48, 2);
+    // Le miroir (trop haut) ne se franchit pas.
+    const high = { x: -1, z: -2.4 };
+    const mirror = { y: 0, vy: 0 };
+    startJump(mirror, 0);
+    for (let i = 0; i < 20; i++) {
+      stepLobbyPosition(high, { x: 0, z: -1 }, 0.025, false, [], undefined, true, mirror.y);
+      stepVertical(mirror, groundHeight(high.x, high.z, true, null), 0.025);
+    }
+    expect(high.z).toBeGreaterThan(-2.9);
   });
 });

@@ -95,6 +95,8 @@ function disposeModel(model: Object3D) {
 }
 
 type Base = keyof typeof CLIP_FOR;
+/** Durée du balayage de bras du croupier quand il distribue (s). */
+const CARD_GESTURE_SECONDS = 0.8;
 
 /** Corps animé : clips KayKit pour repos, marche, salut et bravo ; rotations d'os pour rire, toupie et révérence. */
 export function KayKitBody({
@@ -117,6 +119,9 @@ export function KayKitBody({
   // Immobile longtemps : le personnage s'assoit par terre (descente, attente), puis se relève dès qu'il fait quelque chose.
   const still = useRef(0);
   const born = useRef<number>(-1);
+  const cardTick = useRef<number | undefined>(undefined);
+  const cardTime = useRef(0);
+  const handPos = useRef(new Vector3());
   const seat = useRef<{ state: "none" | "down" | "idle" | "up"; t: number }>({
     state: "none",
     t: 0,
@@ -127,8 +132,10 @@ export function KayKitBody({
       hips: get("hips"),
       spine: get("spine"),
       head: get("head"),
-      armL: get("upperarm.l"),
-      armR: get("upperarm.r"),
+      // Le modèle assemblé (parties) perd les points des noms d'os : « upperarml » au lieu de « upperarm.l ».
+      armL: get("upperarm.l") ?? get("upperarml"),
+      armR: get("upperarm.r") ?? get("upperarmr"),
+      handL: get("handslot.l") ?? get("handslotl"),
     };
   }, [model]);
 
@@ -146,9 +153,13 @@ export function KayKitBody({
           const action = mixer.clipAction(clip);
           if (
             base === "jump" ||
+            base === "death" ||
+            base === "getUp" ||
             base === "interact" ||
             base === "spawn" ||
             base === "sitDown" ||
+            base === "chairDown" ||
+            base === "chairUp" ||
             base === "standUp"
           ) {
             action.setLoop(LoopOnce, 1); // ces gestes ne se répètent pas
@@ -205,6 +216,9 @@ export function KayKitBody({
     if (pose.current.forceSeat !== undefined) {
       // Joueur distant : on suit sa posture. Arrivé déjà assis, il est directement assis (pas de descente rejouée).
       const wantSit = pose.current.forceSeat;
+      // Compteur d'immobilité remis à zéro : sinon, à la fin du relevé, l'avatar se rassoit aussitôt par terre (« immobile depuis
+      // longtemps »), puis se relève dès qu'on bouge : animations en conflit.
+      still.current = 0;
       if (wantSit && (sit.state === "none" || sit.state === "up"))
         Object.assign(sit, {
           state: clock.elapsedTime - born.current < 0.4 ? "idle" : "down",
@@ -228,37 +242,61 @@ export function KayKitBody({
       sit.t += delta;
       if (
         sit.state === "down" &&
-        sit.t >= (actions.current.sitDown?.getClip().duration ?? 1)
+        sit.t >=
+          (actions.current[
+            pose.current.chair ? "chairDown" : "sitDown"
+          ]?.getClip().duration ?? 1)
       )
         Object.assign(sit, { state: "idle", t: 0 });
       else if (
         sit.state === "up" &&
-        sit.t >= (actions.current.standUp?.getClip().duration ?? 1)
+        sit.t >=
+          (actions.current[
+            pose.current.chair ? "chairUp" : "standUp"
+          ]?.getClip().duration ?? 1)
       )
         Object.assign(sit, { state: "none", t: 0 });
     }
     pose.current.seat = sit.state;
     const wanted: Base = pose.current.spawning
       ? "spawn"
-      : sit.state === "down"
-        ? "sitDown"
-        : sit.state === "idle"
-          ? "sitIdle"
-          : sit.state === "up"
-            ? "standUp"
-            : pose.current.jumping
-              ? "jump"
-              : pose.current.interacting
-                ? "interact"
-                : moving
-                  ? pose.current.running
-                    ? "run"
-                    : "walk"
-                  : emote === "wave"
-                    ? "wave"
-                    : emote === "cheer"
-                      ? "cheer"
-                      : "idleA";
+      : pose.current.fall
+        ? "fall"
+        : pose.current.death
+          ? "death"
+          : pose.current.getUp
+            ? "getUp"
+            : sit.state === "down"
+              ? pose.current.chair
+                ? "chairDown"
+                : "sitDown"
+              : sit.state === "idle"
+                ? pose.current.chair
+                  ? "chairIdle"
+                  : "sitIdle"
+                : sit.state === "up"
+                  ? pose.current.chair
+                    ? "chairUp"
+                    : "standUp"
+                  : pose.current.jumping
+                    ? "jump"
+                    : pose.current.interacting
+                      ? "interact"
+                      : moving
+                        ? pose.current.running
+                          ? "run"
+                          : "walk"
+                        : emote === "wave"
+                          ? "wave"
+                          : emote === "cheer"
+                            ? "cheer"
+                            : "idleA";
+    // Geste de distribution (croupier) : pas de clip, un balayage de bras ajouté au repos (voir plus bas). Chronométré depuis le dernier cardTick.
+    if (pose.current.cardTick !== cardTick.current) {
+      cardTick.current = pose.current.cardTick;
+      cardTime.current = 0;
+    }
+    cardTime.current += delta;
     if (wanted !== current.current) {
       const next = actions.current[wanted];
       if (next) {
@@ -302,9 +340,11 @@ export function KayKitBody({
     };
     // Saut : en plus du clip, le personnage s'élève (arc de sinus sur la durée du saut).
     jumpTime.current = pose.current.jumping ? jumpTime.current + delta : 0;
-    const lift =
-      Math.sin(Math.min(1, jumpTime.current / JUMP_SECONDS) * Math.PI) *
-      JUMP_HEIGHT;
+    // La hauteur vient de la simulation (saut sur les meubles) quand le parent la gère ; sinon courbe d'animation seule.
+    const lift = pose.current.physics
+      ? 0
+      : Math.sin(Math.min(1, jumpTime.current / JUMP_SECONDS) * Math.PI) *
+        JUMP_HEIGHT;
     root.current.position.y = lift;
     pose.current.lift = lift;
     const k = Math.min(1, delta * 12);
@@ -313,6 +353,32 @@ export function KayKitBody({
       ? (t * 11) % (Math.PI * 2)
       : MathUtils.lerp(root.current.rotation.y, 0, k);
     if (moving) return;
+    if (pose.current.cardAction) {
+      // Le croupier distribue : la main gauche se lève vers le sabot (la carte y apparaît), puis part vers la cible et revient.
+      // Trois temps : le bras part de côté vers le sabot (prise), pivote vers l'avant (le lancer, la carte part à la fin), revient.
+      const s = cardTime.current;
+      const reach = MathUtils.smoothstep(s, 0, 0.2);
+      const swing = MathUtils.smoothstep(s, 0.2, 0.4);
+      const back = 1 - MathUtils.smoothstep(s, 0.55, CARD_GESTURE_SECONDS);
+      // La main reste au-dessus de la table : le bras est toujours levé vers l'avant (jamais pendant ni dans le dos).
+      rotate(
+        bones.armL,
+        -(1.8 * reach + 0.1 * swing) * back,
+        0,
+        -0.6 * reach * (1 - swing) * back,
+      );
+      rotate(bones.spine, 0.35 * reach * back); // se penche un peu vers la table
+    }
+    // Position de la main gauche (monde) : la carte distribuée y est tenue avant de partir.
+    if (bones.handL) {
+      model.updateWorldMatrix(true, true);
+      bones.handL.getWorldPosition(handPos.current);
+      pose.current.handWorld = {
+        x: handPos.current.x,
+        y: handPos.current.y,
+        z: handPos.current.z,
+      };
+    }
     if (emote === "bow") rotate(bones.spine, 0.7);
     else if (emote === "laugh") {
       rotate(bones.head, -0.35 + Math.sin(t * 16) * 0.05);

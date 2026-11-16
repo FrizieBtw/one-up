@@ -28,13 +28,17 @@ export interface Cap {
 
 /** Clé de soudure : positions arrondies au millième, sans « -0.000 » (une valeur toute proche de zéro ne doit pas changer de clé selon son signe). */
 const r3 = (v: number) => (Math.round(v * 1000) / 1000 + 0).toFixed(3);
-const key = (p: ArrayLike<number>, i: number) => `${r3(p[3 * i]!)},${r3(p[3 * i + 1]!)},${r3(p[3 * i + 2]!)}`;
+const key = (p: ArrayLike<number>, i: number) =>
+  `${r3(p[3 * i]!)},${r3(p[3 * i + 1]!)},${r3(p[3 * i + 2]!)}`;
 
 /** Boucles de bord (arêtes utilisées une seule fois) de l'ensemble de triangles, sommets soudés par position. */
-export function boundaryLoops(input: CapInput): { vertex: number; x: number; y: number; z: number }[][] {
+export function boundaryLoops(
+  input: CapInput,
+): { vertex: number; x: number; y: number; z: number }[][] {
   const { positions, indices, triangles } = input;
   const count = new Map<string, number>();
-  const edges: { e: string; ka: string; kb: string; a: number; b: number }[] = [];
+  const edges: { e: string; ka: string; kb: string; a: number; b: number }[] =
+    [];
   for (const t of triangles) {
     const v = [indices[3 * t]!, indices[3 * t + 1]!, indices[3 * t + 2]!];
     for (let k = 0; k < 3; k++) {
@@ -68,10 +72,16 @@ export function boundaryLoops(input: CapInput): { vertex: number; x: number; y: 
         loop.push(edge.kb);
         edge = out.get(edge.kb)?.find((x) => !x.used);
       }
-      loops.push(loop.map((k) => {
-        const [x, y, z] = k.split(",").map(Number) as [number, number, number];
-        return { vertex: vertexOf.get(k)!, x, y, z };
-      }));
+      loops.push(
+        loop.map((k) => {
+          const [x, y, z] = k.split(",").map(Number) as [
+            number,
+            number,
+            number,
+          ];
+          return { vertex: vertexOf.get(k)!, x, y, z };
+        }),
+      );
     }
   }
   return loops;
@@ -84,17 +94,29 @@ export function boundaryLoops(input: CapInput): { vertex: number; x: number; y: 
 export function capCrown(input: CapInput, lift = 0.1, rings = 4): Cap | null {
   const { positions, indices, triangles } = input;
   let skinTop = -Infinity;
-  for (const t of triangles) for (let k = 0; k < 3; k++) skinTop = Math.max(skinTop, positions[3 * indices[3 * t + k]! + 1]!);
+  for (const t of triangles)
+    for (let k = 0; k < 3; k++)
+      skinTop = Math.max(skinTop, positions[3 * indices[3 * t + k]! + 1]!);
 
   let best: ReturnType<typeof boundaryLoops>[number] | null = null;
   let bestRadius = 0;
   for (const loop of boundaryLoops(input)) {
     if (loop.length < 12) continue;
-    const c = [0, 0, 0].map((_, k) => loop.reduce((s, p) => s + [p.x, p.y, p.z][k]!, 0) / loop.length) as [number, number, number];
-    const radius = Math.max(...loop.map((p) => Math.hypot(p.x - c[0], p.z - c[2])));
+    const c = [0, 0, 0].map(
+      (_, k) => loop.reduce((s, p) => s + [p.x, p.y, p.z][k]!, 0) / loop.length,
+    ) as [number, number, number];
+    const radius = Math.max(
+      ...loop.map((p) => Math.hypot(p.x - c[0], p.z - c[2])),
+    );
     const top = Math.max(...loop.map((p) => p.y));
     // Dessus de la tête : large, centré sur l'axe, à hauteur de front, et rien de la peau au-dessus (sinon le crâne est déjà fermé).
-    if (radius > 0.3 && Math.abs(c[0]) < 0.1 && c[1] > 1.5 && skinTop < top + 0.1 && radius > bestRadius) {
+    if (
+      radius > 0.3 &&
+      Math.abs(c[0]) < 0.1 &&
+      c[1] > 1.5 &&
+      skinTop < top + 0.1 &&
+      radius > bestRadius
+    ) {
       best = loop;
       bestRadius = radius;
     }
@@ -107,13 +129,24 @@ export function capCrown(input: CapInput, lift = 0.1, rings = 4): Cap | null {
   const loopTop = Math.max(...best.map((p) => p.y));
   const apexY = loopTop + lift;
   // Les anneaux : le premier est la boucle elle-même ; l'anneau j se resserre vers l'axe et monte vers le sommet.
-  const out: Cap = { positions: [], source: [], normals: [], indices: [], loopSize: n, apexY };
+  const out: Cap = {
+    positions: [],
+    source: [],
+    normals: [],
+    indices: [],
+    loopSize: n,
+    apexY,
+  };
   const ringStart: number[] = [];
   for (let j = 0; j < rings; j++) {
     const phi = (j / rings) * (Math.PI / 2);
     ringStart.push(out.positions.length / 3);
     for (const p of best) {
-      out.positions.push(cx + (p.x - cx) * Math.cos(phi), p.y + (apexY - p.y) * Math.sin(phi), cz + (p.z - cz) * Math.cos(phi));
+      out.positions.push(
+        cx + (p.x - cx) * Math.cos(phi),
+        p.y + (apexY - p.y) * Math.sin(phi),
+        cz + (p.z - cz) * Math.cos(phi),
+      );
       out.source.push(p.vertex);
     }
   }
@@ -132,18 +165,44 @@ export function capCrown(input: CapInput, lift = 0.1, rings = 4): Cap | null {
     }
   }
   // Orientation vers l'extérieur : le premier triangle doit regarder à l'opposé du centre de la tête.
-  const at = (i: number) => [out.positions[3 * i]!, out.positions[3 * i + 1]!, out.positions[3 * i + 2]!] as const;
-  const [p0, p1, p2] = [at(out.indices[0]!), at(out.indices[1]!), at(out.indices[2]!)];
+  const at = (i: number) =>
+    [
+      out.positions[3 * i]!,
+      out.positions[3 * i + 1]!,
+      out.positions[3 * i + 2]!,
+    ] as const;
+  const [p0, p1, p2] = [
+    at(out.indices[0]!),
+    at(out.indices[1]!),
+    at(out.indices[2]!),
+  ];
   const u = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
   const v = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
-  const normal = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+  const normal = [
+    u[1]! * v[2]! - u[2]! * v[1]!,
+    u[2]! * v[0]! - u[0]! * v[2]!,
+    u[0]! * v[1]! - u[1]! * v[0]!,
+  ];
   const outward = [p0[0] - cx, p0[1] - (loopTop - 0.3), p0[2] - cz];
-  if (normal[0]! * outward[0]! + normal[1]! * outward[1]! + normal[2]! * outward[2]! < 0) {
-    for (let i = 0; i < out.indices.length; i += 3) [out.indices[i + 1], out.indices[i + 2]] = [out.indices[i + 2]!, out.indices[i + 1]!];
+  if (
+    normal[0]! * outward[0]! +
+      normal[1]! * outward[1]! +
+      normal[2]! * outward[2]! <
+    0
+  ) {
+    for (let i = 0; i < out.indices.length; i += 3)
+      [out.indices[i + 1], out.indices[i + 2]] = [
+        out.indices[i + 2]!,
+        out.indices[i + 1]!,
+      ];
   }
   // Normales : direction du centre de la calotte vers chaque sommet.
   for (let i = 0; i < out.positions.length; i += 3) {
-    const d = [out.positions[i]! - cx, out.positions[i + 1]! - (loopTop - 0.3), out.positions[i + 2]! - cz];
+    const d = [
+      out.positions[i]! - cx,
+      out.positions[i + 1]! - (loopTop - 0.3),
+      out.positions[i + 2]! - cz,
+    ];
     const len = Math.hypot(d[0]!, d[1]!, d[2]!) || 1;
     out.normals.push(d[0]! / len, d[1]! / len, d[2]! / len);
   }

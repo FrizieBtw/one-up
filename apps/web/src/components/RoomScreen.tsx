@@ -7,9 +7,11 @@ import {
   ROOM_CODE_LENGTH,
   filterChat,
   launchBlocker,
+  ROOM_ACCESS,
   ROOM_CAPACITY,
   normalizeRoomCode,
   type AvatarConfig,
+  type RoomAccess,
 } from "@stepup/shared";
 import { lookFromId } from "@/avatar/Avatar";
 import { useDisplay } from "@/lib/display";
@@ -30,10 +32,12 @@ import { useNav } from "@/lib/nav";
 import { useSession } from "@/lib/session";
 import { loadMyProfile } from "@/lib/social";
 import type { RoomSpot } from "@/room/RoomScene";
+import { BlackjackScreen } from "@/blackjack/BlackjackScreen";
 import { autoColor, pfpBackground, useMyColor } from "@/lib/playerColor";
 import { HudButton, HudPanel } from "./hud";
 import {
   EnterRoomIcon,
+  FriendsIcon,
   LockIcon,
   PadIcon,
   QrIcon,
@@ -87,6 +91,27 @@ function Prompt({
 }
 
 /** Chat éphémère en bas à gauche : les messages du salon (ou les tiens, en chambre solo) disparaissent en fondu après quelques secondes. */
+/** Couleur choisie par un joueur de la chambre, d'après son pseudo (la nôtre d'abord), ou undefined (couleur automatique). */
+function colorOfName(name: string): string | undefined {
+  const room = useChamber.getState().room;
+  const players = room?.state?.players as
+    | { forEach(cb: (p: { name: string; color: string }) => void): void }
+    | undefined;
+  let found: string | undefined;
+  players?.forEach((p) => {
+    if (p.name === name && p.color) found = p.color;
+  });
+  // Notre propre couleur, connue avant que le salon ne nous l'ait renvoyée (annonce « a rejoint » à la création).
+  if (
+    !found &&
+    room?.state?.players &&
+    name ===
+      (useChamber.getState().snapshot?.players[room.sessionId]?.name ?? "")
+  )
+    found = useMyColor.getState().color ?? undefined;
+  return found;
+}
+
 /** Pseudo en gras, coloré quand c'est le nôtre. */
 function Pseudo({ name, color }: { name: string; color?: string }) {
   return (
@@ -164,7 +189,7 @@ function RoomChat({ name }: { name: string }) {
                   </>
                 ) : m.who && m.text.startsWith(m.who) ? (
                   <i>
-                    <Pseudo name={m.who} />
+                    <Pseudo name={m.who} color={colorOfName(m.who)} />
                     {m.text.slice(m.who.length)}
                   </i>
                 ) : (
@@ -195,19 +220,29 @@ function RoomChat({ name }: { name: string }) {
   );
 }
 
+/** Libellé de chaque mode d'accès à la chambre. */
+const ACCESS_LABEL: Record<RoomAccess, string> = {
+  closed: "Fermée",
+  public: "Publique",
+  friends: "Amis seulement",
+};
+
 /** Ligne cliquable du panneau : curseur main (règle globale des boutons) et fond grisé au survol. */
 const ROW =
   "-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 text-left hover:bg-hud-divider";
 
 /** Infos de la chambre en bas à droite : joueurs (liste, exclusion), accès, code, jeu. Le salon fait foi dès qu'il existe. */
-function RoomInfo({ name }: { name: string }) {
-  const { roomOpen, setRoomOpen, gameId } = useDisplay();
+function RoomInfo({ name, inGame }: { name: string; inGame: boolean }) {
+  const { roomAccess, setRoomAccess, gameId } = useDisplay();
   const myColor = useMyColor((s) => s.color);
-  const { code, room, snapshot, creating } = useChamber();
+  const { code, room, snapshot, creating, error } = useChamber();
+  // La chambre a toujours un code : son salon est créé dès l'arrivée (et recréé si on la quitte ou qu'elle est fermée).
+  useEffect(() => {
+    if (!code && !creating && !error) void ensureChamber();
+  }, [code, creating, error]);
   const [copied, setCopied] = useState(false);
   const [showPlayers, setShowPlayers] = useState(false);
   const [invited, setInvited] = useState(false);
-  const [confirmClose, setConfirmClose] = useState(false);
 
   // Inviter : copie le lien de la chambre (créée à la demande) ; qui l'ouvre arrive directement dedans.
   const invite = async () => {
@@ -240,8 +275,17 @@ function RoomInfo({ name }: { name: string }) {
       : [{ sessionId: "me", name, color: myColor ?? "", host: true, me: true }];
   const players = Math.max(1, entries.length);
   const capacity = snapshot?.capacity ?? ROOM_CAPACITY;
-  const open = snapshot?.isPublic ?? roomOpen;
+  const access = (snapshot?.access ?? roomAccess) as RoomAccess;
   const hostName = roster.find((p) => p.host)?.name ?? name;
+  // Quitter le jeu : libre s'il n'y a personne à la table, sinon seulement entre deux manches.
+  const someoneSeated = snapshot
+    ? Object.values(snapshot.players).some((p) => p.seat >= 0)
+    : false;
+  const canQuitGame =
+    !someoneSeated || snapshot?.blackjack.stage === "roundEnd";
+  // Place du joueur à la table (-1 : debout).
+  const mySeatInfo =
+    snapshot && mySession ? (snapshot.players[mySession]?.seat ?? -1) : -1;
   const game =
     GAMES.find((g) => g.id === (snapshot?.gameId ?? gameId)) ??
     GAMES.find((g) => g.status === "available") ??
@@ -323,19 +367,24 @@ function RoomInfo({ name }: { name: string }) {
         className={ROW}
         disabled={!isHost}
         title={isHost ? undefined : "Réservé à l'hôte"}
-        aria-label={`Accès à la chambre : ${open ? "ouverte" : "privée"}`}
-        onClick={() => {
-          setRoomOpen(!open);
-          // Ouvrir la chambre crée son code ; la refermer ne le supprime pas.
-          if (!open) void ensureChamber();
-        }}
+        aria-label={`Accès à la chambre : ${ACCESS_LABEL[access]}`}
+        // Fermée → Publique → Amis seulement → Fermée.
+        onClick={() =>
+          setRoomAccess(
+            ROOM_ACCESS[
+              (ROOM_ACCESS.indexOf(access) + 1) % ROOM_ACCESS.length
+            ]!,
+          )
+        }
       >
-        {open ? (
-          <UnlockIcon className="size-[15px] text-hud-accent" />
-        ) : (
+        {access === "closed" ? (
           <LockIcon className="size-[15px] text-hud-accent" />
+        ) : access === "friends" ? (
+          <FriendsIcon className="size-[15px] text-hud-accent" />
+        ) : (
+          <UnlockIcon className="size-[15px] text-hud-accent" />
         )}
-        {open ? "Ouverte" : "Privée"}
+        {ACCESS_LABEL[access]}
       </button>
       {code ? (
         <button
@@ -362,14 +411,19 @@ function RoomInfo({ name }: { name: string }) {
           onClick={() => void ensureChamber()}
         >
           <QrIcon className="size-[15px] text-hud-accent" />
-          {creating ? "Création…" : "Créer code"}
+          {creating
+            ? "Création du code…"
+            : error
+              ? "Réessayer"
+              : "Code en préparation…"}
         </button>
       )}
       <button
         type="button"
         className={ROW}
         aria-label={`Jeu : ${game.title}`}
-        title="Choisir un autre jeu"
+        title={inGame ? undefined : "Choisir un autre jeu"}
+        disabled={inGame}
         onClick={() => useNav.getState().openConsole()}
       >
         <PadIcon className="size-[15px] text-hud-accent" />
@@ -377,32 +431,35 @@ function RoomInfo({ name }: { name: string }) {
       </button>
       {isHost ? (
         <>
-          <HudButton
-            className="mt-2 w-full py-2! leading-tight"
-            disabled={Boolean(blocker)}
-            title={blocker ?? undefined}
-            onClick={() =>
-              void startChamberGame(game.id).then(
-                (failure) => failure && useChamber.setState({ error: failure }),
-              )
-            }
-          >
-            Lancer la partie
-          </HudButton>
-          {code && (
+          {!inGame && (
+            <HudButton
+              className="mt-2 w-full py-2! leading-tight"
+              disabled={Boolean(blocker)}
+              title={blocker ?? undefined}
+              onClick={() =>
+                void startChamberGame(game.id).then(
+                  (failure) =>
+                    failure && useChamber.setState({ error: failure }),
+                )
+              }
+            >
+              Lancer le jeu
+            </HudButton>
+          )}
+          {inGame && mySeatInfo < 0 && (
+            // Debout pendant la partie : l'hôte peut l'arrêter (mises de la manche rendues), tout le monde revient dans la chambre.
             <button
               type="button"
-              className="mt-2 w-full rounded-xl bg-hud-bad py-2 font-hud text-sm leading-tight font-semibold text-white"
-              onClick={() => {
-                if (!confirmClose) {
-                  setConfirmClose(true);
-                  setTimeout(() => setConfirmClose(false), 4000);
-                  return;
-                }
-                chamberSend("closeRoom");
-              }}
+              disabled={!canQuitGame}
+              title={
+                canQuitGame
+                  ? undefined
+                  : "Des joueurs sont à la table : attends la fin de la manche."
+              }
+              className="mt-2 w-full rounded-xl bg-hud-bad py-2 font-hud text-sm leading-tight font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => chamberSend("stopGame")}
             >
-              {confirmClose ? "Confirmer la fermeture" : "Fermer la chambre"}
+              Quitter le jeu
             </button>
           )}
         </>
@@ -525,34 +582,6 @@ function RoomJoin() {
   );
 }
 
-/** Compte à rebours de lancement, visible de tous les joueurs ; l'hôte peut l'annuler. */
-function Countdown() {
-  const snapshot = useChamber((s) => s.snapshot);
-  const room = useChamber((s) => s.room);
-  if (snapshot?.phase !== "countdown") return null;
-  const isHost = snapshot.hostSessionId === room?.sessionId;
-  return (
-    <HudPanel
-      role="status"
-      className="fixed top-1/3 left-1/2 z-30 -translate-x-1/2 px-8 py-5 text-center shadow-[0_10px_40px_rgba(15,13,34,0.45)]"
-    >
-      <p className="text-sm text-hud-muted">La partie démarre dans</p>
-      <p className="font-pixel text-6xl leading-none text-hud-accent">
-        {snapshot.countdown}
-      </p>
-      {isHost && (
-        <HudButton
-          variant="soft"
-          className="mt-3"
-          onClick={() => chamberSend("cancelStart")}
-        >
-          Annuler le lancement
-        </HudButton>
-      )}
-    </HudPanel>
-  );
-}
-
 /** Annonce du salon (hôte changé, lancement annulé…) : un bandeau de quelques secondes en haut de la chambre. */
 function Notice() {
   const notice = useChamber((s) => s.notice);
@@ -579,6 +608,14 @@ export function RoomScreen({
   const cosmetics = useEquippedCosmetics();
   const room = useChamber((s) => s.room);
   const snapshot = useChamber((s) => s.snapshot);
+  // Pendant une partie de blackjack, la chambre devient la salle de jeu : la table descend, l'interface de jeu s'affiche.
+  const inGame = Boolean(
+    snapshot &&
+    snapshot.gameId === "blackjack" &&
+    (snapshot.phase === "playing" || snapshot.phase === "results"),
+  );
+  const seatRef = useRef<HTMLDivElement>(null);
+  const [nearSeat, setNearSeat] = useState<number | null>(null);
   const [avatar, setAvatar] = useState<AvatarConfig | null>(null);
   const [near, setNear] = useState<RoomSpot | null>(null);
   const [interactTick, setInteractTick] = useState(0);
@@ -635,6 +672,52 @@ export function RoomScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `actions` ne dépend que du magasin de navigation
   }, [near, session.userId]);
 
+  // Blackjack : s'asseoir sur une place libre, ou se relever, avant la première manche et entre deux manches.
+  const bjSnap =
+    snapshot?.gameId === "blackjack" && snapshot.phase === "playing"
+      ? snapshot
+      : null;
+  const seatingOpen = Boolean(
+    bjSnap &&
+    (bjSnap.blackjack.round === 0 ||
+      bjSnap.blackjack.stage === "roundEnd" ||
+      bjSnap.blackjack.stage === "betting"),
+  );
+  const mySeat =
+    room && snapshot ? (snapshot.players[room.sessionId]?.seat ?? -1) : -1;
+  const canStand = seatingOpen && mySeat >= 0;
+  const canSit = seatingOpen && mySeat < 0 && nearSeat !== null;
+  const seatAction = () => {
+    if (canSit && nearSeat !== null) chamberSend("sitAt", { seat: nearSeat });
+    else if (canStand) chamberSend("standUp", {});
+  };
+  useEffect(() => {
+    if (!canSit && !canStand) return;
+    const act = seatAction;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target;
+      const typing =
+        el instanceof HTMLElement &&
+        (el.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
+      if (e.code === useKeybinds.getState().keys.it && !e.repeat && !typing)
+        act();
+    };
+    window.addEventListener("keydown", onKey);
+    readGamepadPresses();
+    const poll = setInterval(
+      () =>
+        readGamepadPresses().includes(
+          PAD_INDEX[useKeybinds.getState().pad.it ?? "a"],
+        ) && act(),
+      50,
+    );
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      clearInterval(poll);
+    };
+  }, [canSit, canStand, nearSeat]);
+
   const floatingDecor = useDisplay((s) => s.floatingDecor);
   const name = session.name ?? "";
   const look = avatar ?? lookFromId(session.identityId ?? name);
@@ -654,7 +737,8 @@ export function RoomScreen({
         look={look}
         name={name}
         cosmetics={cosmetics}
-        holo={{ console: consoleRef, mirror: mirrorRef }}
+        holo={{ console: consoleRef, mirror: mirrorRef, seat: seatRef }}
+        litSeat={canSit ? nearSeat : null}
         active={active}
         showPlayer={showPlayer}
         room={room}
@@ -662,6 +746,7 @@ export function RoomScreen({
         interactTick={interactTick}
         near={active && !(near === "mirror" && !session.userId) ? near : null} // pas de miroir (contour) sans compte
         onNear={setNear}
+        onNearSeat={setNearSeat}
       />
       {active && (
         <>
@@ -686,11 +771,28 @@ export function RoomScreen({
             />
           )}
           <RoomChat name={name} />
+          {inGame &&
+          room &&
+          snapshot &&
+          !(snapshot.phase === "playing" && snapshot.blackjack.round === 0) ? (
+            <BlackjackScreen
+              state={snapshot}
+              sessionId={room.sessionId}
+              isHost={snapshot.hostSessionId === room.sessionId}
+              send={(type, message) => void room.send(type, message)}
+            />
+          ) : null}
+          {/* Les infos de la chambre et l'encoche pour rejoindre une chambre restent en bas à droite pendant la partie. */}
           <div className="fixed right-4 bottom-4 z-20 flex w-[214px] flex-col gap-2">
             <RoomJoin />
-            <RoomInfo name={name} />
+            <RoomInfo name={name} inGame={inGame} />
           </div>
-          <Countdown />
+          <Prompt
+            holoRef={seatRef}
+            visible={canSit}
+            label="S'asseoir"
+            onClick={seatAction}
+          />
           <Notice />
         </>
       )}
